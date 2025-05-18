@@ -1,0 +1,5 @@
+app_name: EU-CLAMS
+version: 0.1.0
+database_path: ./data/db.yaml
+player_name: Test Player
+team_name: Test Team

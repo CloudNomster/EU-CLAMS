@@ -1,0 +1,12 @@
+[Details]
+Website = "https://github.com/your-username/EU_Tool"
+Description = "Entropia Universe Chat Log Analyzer and Monitor"
+
+[Release]
+Icon = "Icon.png"
+
+[App]
+ID = "com.github.eu-clams"
+Name = "EU-CLAMS"
+Version = "0.1.0"
+Build = 1
