@@ -10,7 +10,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -101,13 +100,6 @@ func (g *ConfigGUI) createUI() {
 	// Create database path container with browse button
 	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, g.dbPathEntry)
 	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, g.chatLogPathEntry)
-
-	// Create buttons
-	saveButton := widget.NewButtonWithIcon("Save Configuration", theme.DocumentSaveIcon(), g.saveConfig)
-	cancelButton := widget.NewButtonWithIcon("Cancel", theme.CancelIcon(), func() {
-		g.mainWindow.Close()
-	})
-
 	// Create form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
@@ -115,25 +107,17 @@ func (g *ConfigGUI) createUI() {
 			{Text: "Team Name", Widget: g.teamNameEntry, HintText: "Your team name (optional)"},
 			{Text: "Database Path", Widget: dbPathContainer, HintText: "Where to store your globals database"},
 			{Text: "Chat Log Path", Widget: chatLogPathContainer, HintText: "Path to Entropia Universe chat.log"},
-		},
-		OnSubmit: g.saveConfig,
+		}, OnSubmit: g.saveConfig,
 		OnCancel: func() {
 			g.mainWindow.Close()
 		},
+		SubmitText: "Save Configuration",
+		CancelText: "Close",
 	}
-
-	// Create buttons container
-	buttons := container.New(layout.NewHBoxLayout(),
-		layout.NewSpacer(),
-		cancelButton,
-		saveButton,
-	)
-
 	// Main content
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("EU-CLAMS Configuration", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		form,
-		buttons,
 	)
 
 	g.mainWindow.SetContent(content)
@@ -142,7 +126,8 @@ func (g *ConfigGUI) createUI() {
 }
 
 // saveConfig saves the configuration
-func (g *ConfigGUI) saveConfig() { // Update configuration values from form fields
+func (g *ConfigGUI) saveConfig() {
+	// Update configuration values from form fields
 	g.config.PlayerName = g.playerNameEntry.Text
 	g.config.TeamName = g.teamNameEntry.Text
 	g.config.DatabasePath = g.dbPathEntry.Text
@@ -162,5 +147,9 @@ func (g *ConfigGUI) saveConfig() { // Update configuration values from form fiel
 		g.onSaveCallback(g.config)
 	}
 
+	// Show success message
 	dialog.ShowInformation("Success", "Configuration saved successfully", g.mainWindow)
+
+	// Close the window
+	g.mainWindow.Close()
 }
