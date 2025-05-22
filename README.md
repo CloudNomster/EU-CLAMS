@@ -53,10 +53,10 @@ Configuration can be provided in three ways:
    ```yaml
    # config.yaml
    app_name: EU-CLAMS
-   version: 0.1.0
    database_path: ./data/db.yaml
    player_name: YourCharacterName
-   team_name: YourTeamName   ```
+   team_name: YourTeamName
+   ```
 
 3. GUI Configuration Dialog (when using GUI mode):
    - Launch the application: `eu-clams`
