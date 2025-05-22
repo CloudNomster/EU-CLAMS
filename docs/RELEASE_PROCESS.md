@@ -16,7 +16,7 @@ This document outlines the process for creating new releases of EU-CLAMS.
 
 4. After the PR is merged, create and push a new tag with the version number:
 
-   ```bash
+   ```powershell
    # Make sure you're on the main branch and up-to-date
    git checkout main
    git pull
@@ -28,7 +28,7 @@ This document outlines the process for creating new releases of EU-CLAMS.
    git push origin v1.2.3
    ```
 
-5. This will automatically trigger the release workflow, which will:
+5. The tag push will automatically trigger the release workflow (not regular pushes to main), which will:
    - Build the application
    - Create a ZIP package with the necessary files
    - Create a GitHub release with the executable
