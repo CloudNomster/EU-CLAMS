@@ -19,6 +19,11 @@ jobs:
           go-version: '1.24.3'  # Using the same Go version as in go.mod
           cache: true
 
+      - name: Install Fyne dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+
       - name: Install MinGW for cross-compilation
         run: |
           sudo apt-get update

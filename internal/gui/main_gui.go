@@ -100,7 +100,7 @@ func (g *MainGUI) createUI() {
 	)
 	// Main content
 	content := container.NewVBox(
-		widget.NewLabelWithStyle("EU-CLAMS v1.0", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("EU-CLAMS", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		boxesContainer,
 		buttonsContainer,
 	)

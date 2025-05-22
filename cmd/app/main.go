@@ -75,7 +75,7 @@ func main() {
 		}
 	}
 
-	log.Info("App: %s v%s", cfg.AppName, cfg.Version)
+	log.Info("App: %s v%s", cfg.AppName, version)
 
 	// Override player/team names from command line if provided
 	if *playerName != "" {
