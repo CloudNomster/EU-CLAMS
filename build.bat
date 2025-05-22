@@ -25,4 +25,4 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo Build successful!
-echo To run the application with GUI: eu-tool.exe
+echo To run the application with GUI: eu-clams.exe
