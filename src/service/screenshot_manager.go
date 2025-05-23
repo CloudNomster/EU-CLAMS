@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -16,21 +17,29 @@ type ScreenshotManager struct {
 	gameWindowTitle string
 	enabled         bool
 	lastScreenshot  time.Time
+	platformSupport bool // Whether the current platform supports screenshots
 }
 
 // NewScreenshotManager creates a new screenshot manager
 func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool) *ScreenshotManager {
+	// Check if we're on Windows, which is the only platform with screenshot support
+	platformSupport := runtime.GOOS == "windows"
+
 	return &ScreenshotManager{
 		screenshotDir:   screenshotDir,
 		gameWindowTitle: gameWindowTitle,
-		enabled:         enabled,
+		enabled:         enabled && platformSupport, // Only enable if platform supports it
 		lastScreenshot:  time.Time{},
+		platformSupport: platformSupport,
 	}
 }
 
 // TakeScreenshotForGlobal takes a screenshot for a global entry if enabled
 func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry) (string, error) {
 	if !sm.enabled {
+		if !sm.platformSupport {
+			return "", fmt.Errorf("screenshots are not supported on %s platform", runtime.GOOS)
+		}
 		return "", fmt.Errorf("screenshots are disabled")
 	}
 
@@ -80,5 +89,11 @@ func (sm *ScreenshotManager) IsEnabled() bool {
 
 // SetEnabled enables or disables screenshots
 func (sm *ScreenshotManager) SetEnabled(enabled bool) {
-	sm.enabled = enabled
+	// Only allow enabling if platform supports it
+	sm.enabled = enabled && sm.platformSupport
+}
+
+// IsPlatformSupported returns whether the current platform supports screenshots
+func (sm *ScreenshotManager) IsPlatformSupported() bool {
+	return sm.platformSupport
 }
