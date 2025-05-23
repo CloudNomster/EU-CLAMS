@@ -22,10 +22,13 @@ type ConfigGUI struct {
 	log        *logger.Logger
 
 	// Form fields
-	playerNameEntry  *widget.Entry
-	teamNameEntry    *widget.Entry
-	dbPathEntry      *widget.Entry
-	chatLogPathEntry *widget.Entry
+	playerNameEntry        *widget.Entry
+	teamNameEntry          *widget.Entry
+	dbPathEntry            *widget.Entry
+	chatLogPathEntry       *widget.Entry
+	enableScreenshotsCheck *widget.Check
+	screenshotDirEntry     *widget.Entry
+	gameWindowTitleEntry   *widget.Entry
 
 	// Save callback
 	onSaveCallback func(config config.Config)
@@ -78,6 +81,17 @@ func (g *ConfigGUI) createUI() {
 		g.chatLogPathEntry.SetText(defaultChatLogPath)
 	}
 
+	// Create screenshot related fields
+	g.enableScreenshotsCheck = widget.NewCheck("", nil)
+	g.enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
+
+	g.screenshotDirEntry = widget.NewEntry()
+	g.screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
+	g.screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
+	g.gameWindowTitleEntry = widget.NewEntry()
+	g.gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
+	g.gameWindowTitleEntry.SetPlaceHolder("Entropia Universe Client")
+
 	// Create buttons for file selection
 	dbPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
 		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
@@ -97,9 +111,20 @@ func (g *ConfigGUI) createUI() {
 		}, g.mainWindow)
 	})
 
+	screenshotDirButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			g.screenshotDirEntry.SetText(uri.Path())
+		}, g.mainWindow)
+	})
+
 	// Create database path container with browse button
 	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, g.dbPathEntry)
 	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, g.chatLogPathEntry)
+	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, g.screenshotDirEntry)
+
 	// Create form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
@@ -107,6 +132,9 @@ func (g *ConfigGUI) createUI() {
 			{Text: "Team Name", Widget: g.teamNameEntry, HintText: "Your team name (optional)"},
 			{Text: "Database Path", Widget: dbPathContainer, HintText: "Where to store your globals database"},
 			{Text: "Chat Log Path", Widget: chatLogPathContainer, HintText: "Path to Entropia Universe chat.log"},
+			{Text: "Enable Screenshots", Widget: g.enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
+			{Text: "Screenshot Directory", Widget: screenshotDirContainer, HintText: "Where to save screenshots"},
+			{Text: "Game Window Title", Widget: g.gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
 		}, OnSubmit: g.saveConfig,
 		OnCancel: func() {
 			g.mainWindow.Close()
@@ -121,7 +149,7 @@ func (g *ConfigGUI) createUI() {
 	)
 
 	g.mainWindow.SetContent(content)
-	g.mainWindow.Resize(fyne.NewSize(600, 400))
+	g.mainWindow.Resize(fyne.NewSize(600, 500))
 	g.mainWindow.CenterOnScreen()
 }
 
@@ -131,6 +159,9 @@ func (g *ConfigGUI) saveConfig() {
 	g.config.PlayerName = g.playerNameEntry.Text
 	g.config.TeamName = g.teamNameEntry.Text
 	g.config.DatabasePath = g.dbPathEntry.Text
+	g.config.EnableScreenshots = g.enableScreenshotsCheck.Checked
+	g.config.ScreenshotDirectory = g.screenshotDirEntry.Text
+	g.config.GameWindowTitle = g.gameWindowTitleEntry.Text
 
 	// Save to file
 	err := g.config.SaveConfigToFile("config.yaml")

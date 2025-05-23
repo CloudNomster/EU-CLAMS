@@ -19,8 +19,7 @@ const (
 
 var log = logger.New()
 
-func main() {
-	// Define command-line flags
+func main() { // Define command-line flags
 	configPath := flag.String("config", "", "Path to configuration file")
 	logPath := flag.String("log", "", "Path to Entropia Universe chat log file")
 	playerName := flag.String("player", "", "Your character name in Entropia Universe")
@@ -30,6 +29,9 @@ func main() {
 	importLog := flag.Bool("import", false, "Import the chat log file without monitoring")
 	monitor := flag.Bool("monitor", false, "Monitor chat log for changes (default true)")
 	useCLI := flag.Bool("cli", false, "Use command-line interface instead of GUI")
+	enableScreenshots := flag.Bool("screenshots", true, "Enable screenshots for globals and HoFs")
+	screenshotDir := flag.String("screenshot-dir", "./data/screenshots", "Directory to save screenshots")
+	gameWindow := flag.String("game-window", "Entropia Universe Client", "Game window title")
 	_ = flag.Bool("verbose", false, "Enable verbose logging") // Unused for now
 
 	// Parse command-line flags
@@ -86,6 +88,15 @@ func main() {
 		cfg.TeamName = *teamName
 		log.Info("Using team name from command line: %s", cfg.TeamName)
 	}
+
+	// Override screenshot settings from command line
+	cfg.EnableScreenshots = *enableScreenshots
+	log.Info("Screenshot capture: %v", cfg.EnableScreenshots)
+	cfg.ScreenshotDirectory = *screenshotDir
+	log.Info("Screenshot directory: %s", cfg.ScreenshotDirectory)
+
+	cfg.GameWindowTitle = *gameWindow
+	log.Info("Game window title: %s", cfg.GameWindowTitle)
 
 	// Use command-line interface if explicitly requested or if certain flags are set
 	if *useCLI || *showStats || *importLog || *monitor {

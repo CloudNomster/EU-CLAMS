@@ -11,6 +11,7 @@ This is a Go-based tool for tracking and analyzing Entropia Universe global even
   - Crafting globals
   - Mining/deposit finds
 - Hall of Fame (HoF) detection
+- Automatic screenshots of globals and HoFs
 - Progress tracking during imports
 - Detailed statistics and analysis
 - Persistent storage with automatic updates
@@ -67,7 +68,19 @@ Configuration can be provided in three ways:
 ### Command-line Options
 
 ```
--config string    Path to configuration file
+-config string           Path to configuration file
+-log string              Path to chat log file (default: Documents\Entropia Universe\chat.log)
+-player string           Your character name
+-team string             Your team name
+-import                  One-time import without monitoring
+-stats                   Show statistics for your globals
+-monitor                 Monitor chat log for changes
+-version                 Display version information
+-cli                     Use command-line interface instead of GUI
+-screenshots bool        Enable screenshots for globals and HoFs (default: true)
+-screenshot-dir string   Directory to save screenshots (default: ./data/screenshots)
+-game-window string      Game window title (default: Entropia Universe Client)
+```
 -log string       Path to chat log file (default: Documents\Entropia Universe\chat.log)
 -player string    Your character name
 -team string      Your team name
@@ -154,6 +167,50 @@ Key features:
 - Tracks last processed position to avoid duplicates
 - Supports both relative and absolute paths
 - Automatic backup before modifications (coming soon)
+
+### Screenshots
+
+The tool can automatically take screenshots when you or your team gets a global or Hall of Fame entry:
+
+- Screenshots are saved in the configured directory (default: `./data/screenshots`)
+- Filename format: `[global/hof]_[type]_[player/team]_[timestamp].png`
+- Only triggered for relevant globals (your player or team name)
+- All Hall of Fame entries trigger screenshots
+- Can be enabled/disabled in configuration
+
+To configure screenshots:
+1. Go to "Configure" in the app
+2. Enable/disable "Enable Screenshots" option
+3. Set "Screenshot Directory" to your preferred location
+4. Set "Game Window Title" if your game window has a different title (default: "Entropia Universe Client")
+
+#### How Screenshots Work
+
+When a global or Hall of Fame event is detected:
+1. The app checks if screenshots are enabled
+2. It looks for a window with the specified title ("Entropia Universe Client" by default)
+3. It takes a screenshot of that window
+4. The screenshot is saved to the configured directory with a filename that includes:
+   - Event type (global or HoF)
+   - Global type (kill, craft, etc.)
+   - Player or team name
+   - Timestamp
+
+Example filename: `hof_kill_YourName_2025-05-16_10-00-00.png`
+
+#### Command-line Screenshot Control
+
+You can also control screenshot behavior via command line:
+```bash
+# Disable screenshots
+eu-clams -screenshots=false
+
+# Change screenshot directory
+eu-clams -screenshot-dir="C:\MyScreenshots"
+
+# Change game window title
+eu-clams -game-window="My Entropia Client"
+```
 
 ### Examples
 

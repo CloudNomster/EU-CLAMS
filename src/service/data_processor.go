@@ -20,6 +20,8 @@ type DataProcessorService struct {
 	progressChan chan float64
 	stopChan     chan struct{}
 	watchDelay   time.Duration
+	lastGlobal   time.Time
+	isImportMode bool // Flag to indicate import-only mode, no screenshots
 }
 
 // NewDataProcessorService creates a new DataProcessorService instance
@@ -31,7 +33,9 @@ func NewDataProcessorService(log *logger.Logger, cfg config.Config, chatLogPath 
 		chatLogPath:  chatLogPath,
 		progressChan: make(chan float64, 1),
 		stopChan:     make(chan struct{}),
-		watchDelay:   time.Second * 1, // Check for changes every 2 seconds
+		watchDelay:   time.Second * 1, // Check for changes every second
+		lastGlobal:   time.Time{},
+		isImportMode: false, // Default to monitoring mode which takes screenshots
 	}
 }
 
@@ -84,6 +88,9 @@ func (s *DataProcessorService) Run() error {
 		return fmt.Errorf("chat log path is required")
 	}
 
+	// Make sure we're not in import mode when running regular monitoring
+	s.isImportMode = false
+
 	// Initial processing of the log file
 	if err := s.processLogFile(); err != nil {
 		return err
@@ -131,6 +138,9 @@ func (s *DataProcessorService) processLogFile() error {
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
 
+	// Store the current globals count before processing
+	oldGlobalsCount := len(s.db.Globals)
+
 	// If we haven't processed this file before, process it from the beginning
 	if s.db.LastProcessedSize == 0 {
 		s.log.Info("Processing entire chat log file: %s", s.chatLogPath)
@@ -148,6 +158,10 @@ func (s *DataProcessorService) processLogFile() error {
 		}
 		if count > 0 {
 			s.log.Info("Processed %d new global entries", count)
+
+			// Get the new globals that were added
+			newGlobals := s.db.Globals[oldGlobalsCount:]
+			s.HandleNewGlobals(newGlobals)
 		}
 	}
 
@@ -194,6 +208,9 @@ func (s *DataProcessorService) GetDatabase() *storage.EntropyDB {
 // ProcessLogOnly processes the log file once without starting monitoring
 func (s *DataProcessorService) ProcessLogOnly() error {
 	s.log.Info("Processing log file once: %s", s.chatLogPath)
+	// Set import mode flag to disable screenshots
+	s.isImportMode = true
+
 	// Process the log file
 	if err := s.processLogFile(); err != nil {
 		return err
