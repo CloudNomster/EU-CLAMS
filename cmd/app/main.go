@@ -182,27 +182,15 @@ func main() { // Define command-line flags
 			if err := webService.Initialize(); err != nil {
 				log.Error("Failed to initialize web service: %v", err)
 				os.Exit(1)
-			}
-
-			// If we're not monitoring, run web server in main thread (blocking)
-			if !*monitor && *importLog || *showStats {
-				if err := webService.Run(); err != nil {
-					log.Error("Web server error: %v", err)
-					os.Exit(1)
-				}
-				return
-			}
-
-			// Otherwise start the web server in background
+			}			// Always start the web server in background
 			go func() {
 				if err := webService.Run(); err != nil {
 					log.Error("Web server error: %v", err)
 					os.Exit(1)
 				}
 			}()
-		}
-		// If we have any background services running, wait for Ctrl+C
-		if (*monitor || (!*importLog && !*showStats)) || ((startWebServer) && !*importLog && !*showStats) {
+		}		// If we have any background services running, wait for Ctrl+C
+		if *monitor || startWebServer || (!*importLog && !*showStats) {
 			log.Info("Press Ctrl+C to stop services...")
 
 			// Handle Ctrl+C gracefully
