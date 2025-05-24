@@ -182,14 +182,14 @@ func main() { // Define command-line flags
 			if err := webService.Initialize(); err != nil {
 				log.Error("Failed to initialize web service: %v", err)
 				os.Exit(1)
-			}			// Always start the web server in background
+			} // Always start the web server in background
 			go func() {
 				if err := webService.Run(); err != nil {
 					log.Error("Web server error: %v", err)
 					os.Exit(1)
 				}
 			}()
-		}		// If we have any background services running, wait for Ctrl+C
+		} // If we have any background services running, wait for Ctrl+C
 		if *monitor || startWebServer || (!*importLog && !*showStats) {
 			log.Info("Press Ctrl+C to stop services...")
 
