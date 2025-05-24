@@ -12,9 +12,7 @@ This is a Go-based tool for tracking and analyzing Entropia Universe global even
   - Mining/deposit finds
 - Hall of Fame (HoF) detection
 - Automatic screenshots of globals and HoFs
-- Progress tracking during imports
 - Detailed statistics and analysis
-- Persistent storage with automatic updates
 
 ## Project Structure
 
@@ -36,7 +34,7 @@ This is a Go-based tool for tracking and analyzing Entropia Universe global even
 2. Install prerequisites:
    - For GUI mode: Install MinGW-w64 or TDM-GCC for Windows (download from https://jmeubank.github.io/tdm-gcc/)
 3. Build the application:
-   - Using the build script: `.\build.ps1` or `build.bat`
+   - Using the build script: `build.bat`
    - Manual build: `go build -o eu-clams.exe ./cmd/app`
 
 ### Configuration
@@ -80,15 +78,6 @@ Configuration can be provided in three ways:
 -screenshots bool        Enable screenshots for globals and HoFs (default: true)
 -screenshot-dir string   Directory to save screenshots (default: ./data/screenshots)
 -game-window string      Game window title (default: Entropia Universe Client)
-```
--log string       Path to chat log file (default: Documents\Entropia Universe\chat.log)
--player string    Your character name
--team string      Your team name
--import           One-time import without monitoring
--stats            Show statistics for your globals
--monitor          Monitor chat log for changes
--version          Display version information
--cli              Use command-line interface instead of GUI
 ```
 
 ### Usage Modes
@@ -166,7 +155,6 @@ Key features:
 - Maintains original chat log messages
 - Tracks last processed position to avoid duplicates
 - Supports both relative and absolute paths
-- Automatic backup before modifications (coming soon)
 
 ### Screenshots
 
@@ -182,7 +170,7 @@ To configure screenshots:
 1. Go to "Configure" in the app
 2. Enable/disable "Enable Screenshots" option
 3. Set "Screenshot Directory" to your preferred location
-4. Set "Game Window Title" if your game window has a different title (default: "Entropia Universe Client")
+4. Set "Game Window Title" if your game window has a different title. The default should work. (default: "Entropia Universe Client")
 
 #### How Screenshots Work
 
@@ -234,7 +222,7 @@ eu-clams -game-window="My Entropia Client"
    eu-clams -cli -log "C:\Games\EntrU\chat.log" -player "YourName"
    ```
 
-5. Use a custom configuration and database location:
+5. Use a custom configuration location:
    ```bash
    eu-clams -config "path/to/config.yaml"
    ```
