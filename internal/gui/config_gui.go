@@ -4,8 +4,10 @@ package gui
 import (
 	"eu-clams/internal/config"
 	"eu-clams/internal/logger"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -20,7 +22,6 @@ type ConfigGUI struct {
 	mainWindow fyne.Window
 	config     config.Config
 	log        *logger.Logger
-
 	// Form fields
 	playerNameEntry        *widget.Entry
 	teamNameEntry          *widget.Entry
@@ -29,6 +30,8 @@ type ConfigGUI struct {
 	enableScreenshotsCheck *widget.Check
 	screenshotDirEntry     *widget.Entry
 	gameWindowTitleEntry   *widget.Entry
+	enableWebServerCheck   *widget.Check
+	webServerPortEntry     *widget.Entry
 
 	// Save callback
 	onSaveCallback func(config config.Config)
@@ -84,13 +87,18 @@ func (g *ConfigGUI) createUI() {
 	// Create screenshot related fields
 	g.enableScreenshotsCheck = widget.NewCheck("", nil)
 	g.enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
-
 	g.screenshotDirEntry = widget.NewEntry()
 	g.screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
 	g.screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
 	g.gameWindowTitleEntry = widget.NewEntry()
 	g.gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
 	g.gameWindowTitleEntry.SetPlaceHolder("Entropia Universe Client")
+	// Create web server related fields
+	g.enableWebServerCheck = widget.NewCheck("", nil)
+	g.enableWebServerCheck.SetChecked(g.config.EnableWebServer)
+	g.webServerPortEntry = widget.NewEntry()
+	g.webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
+	g.webServerPortEntry.SetPlaceHolder("8080")
 
 	// Create buttons for file selection
 	dbPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
@@ -124,7 +132,6 @@ func (g *ConfigGUI) createUI() {
 	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, g.dbPathEntry)
 	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, g.chatLogPathEntry)
 	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, g.screenshotDirEntry)
-
 	// Create form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
@@ -135,6 +142,8 @@ func (g *ConfigGUI) createUI() {
 			{Text: "Enable Screenshots", Widget: g.enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
 			{Text: "Screenshot Directory", Widget: screenshotDirContainer, HintText: "Where to save screenshots"},
 			{Text: "Game Window Title", Widget: g.gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
+			{Text: "Enable Web Server", Widget: g.enableWebServerCheck, HintText: "Start a web server to view statistics"},
+			{Text: "Web Server Port", Widget: g.webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
 		}, OnSubmit: g.saveConfig,
 		OnCancel: func() {
 			g.mainWindow.Close()
@@ -154,14 +163,24 @@ func (g *ConfigGUI) createUI() {
 }
 
 // saveConfig saves the configuration
-func (g *ConfigGUI) saveConfig() {
-	// Update configuration values from form fields
+func (g *ConfigGUI) saveConfig() { // Update configuration values from form fields
 	g.config.PlayerName = g.playerNameEntry.Text
 	g.config.TeamName = g.teamNameEntry.Text
 	g.config.DatabasePath = g.dbPathEntry.Text
 	g.config.EnableScreenshots = g.enableScreenshotsCheck.Checked
 	g.config.ScreenshotDirectory = g.screenshotDirEntry.Text
 	g.config.GameWindowTitle = g.gameWindowTitleEntry.Text
+	g.config.EnableWebServer = g.enableWebServerCheck.Checked
+
+	// Convert web server port from string to int
+	webServerPort := 8080 // Default port
+	if port, err := strconv.Atoi(g.webServerPortEntry.Text); err == nil && port > 0 {
+		webServerPort = port
+	} else if g.webServerPortEntry.Text != "" {
+		dialog.ShowError(fmt.Errorf("invalid web server port: must be a positive number"), g.mainWindow)
+		return
+	}
+	g.config.WebServerPort = webServerPort
 
 	// Save to file
 	err := g.config.SaveConfigToFile("config.yaml")

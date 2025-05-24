@@ -68,5 +68,18 @@ func (s *DataProcessorService) HandleNewGlobals(newEntries []storage.GlobalEntry
 				}
 			}(entry)
 		}
+
+		// Broadcast event to web services
+		if entry.IsHof {
+			// Broadcast as a HoF entry
+			BroadcastToWebServices("new_hof", entry)
+		} else {
+			// Broadcast as a global entry
+			BroadcastToWebServices("new_global", entry)
+		}
+
+		// Also broadcast updated stats
+		statsData := s.db.GetStatsData()
+		BroadcastToWebServices("stats_update", statsData)
 	}
 }

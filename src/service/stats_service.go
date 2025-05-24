@@ -51,7 +51,7 @@ func (s *StatsService) Run() error {
 
 	// Generate statistics
 	s.log.Info("Generating statistics for player: %s", s.playerName)
-	statsData := stats.GenerateStats(s.db)
+	statsData := s.db.GetStatsData()
 	// Format and print report
 	statsReport := stats.FormatStatsReport(statsData, s.playerName, s.teamName)
 	fmt.Println("\n--- PLAYER STATISTICS ---")
@@ -63,7 +63,7 @@ func (s *StatsService) Run() error {
 // GenerateStats returns statistics data
 func (s *StatsService) GenerateStats() stats.Stats {
 	s.log.Info("Generating statistics for player: %s", s.playerName)
-	return stats.GenerateStats(s.db)
+	return s.db.GetStatsData()
 }
 
 // FormatStatsReport formats a statistics report as a string

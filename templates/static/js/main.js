@@ -1,0 +1,135 @@
+// Main JavaScript for EU-CLAMS Web Interface
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Add dark mode toggle
+    const darkModeToggle = document.createElement('div');
+    darkModeToggle.className = 'dark-mode-toggle';
+    darkModeToggle.textContent = '🌙';
+    darkModeToggle.title = 'Toggle Dark Mode';
+    document.body.appendChild(darkModeToggle);
+    
+    // Check for saved dark mode preference
+    if (localStorage.getItem('darkMode') === 'true') {
+        document.body.classList.add('dark-mode');
+        darkModeToggle.textContent = '☀️';
+    }
+    
+    // Dark mode toggle function
+    darkModeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+        if (document.body.classList.contains('dark-mode')) {
+            localStorage.setItem('darkMode', 'true');
+            darkModeToggle.textContent = '☀️';
+        } else {
+            localStorage.setItem('darkMode', 'false');
+            darkModeToggle.textContent = '🌙';
+        }
+    });
+    
+    // Add periodic refresh functionality (every 60 seconds)
+    setInterval(refreshData, 60000);
+});
+
+// Function to refresh data
+function refreshData() {
+    // Fetch updated stats
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(stats => {
+            updateStats(stats);
+        })
+        .catch(error => console.error('Error fetching stats:', error));
+    
+    // Fetch updated globals
+    fetch('/api/globals')
+        .then(response => response.json())
+        .then(globals => {
+            updateGlobals(globals);
+        })
+        .catch(error => console.error('Error fetching globals:', error));
+    
+    // Fetch updated HOFs
+    fetch('/api/hofs')
+        .then(response => response.json())
+        .then(hofs => {
+            updateHofs(hofs);
+        })
+        .catch(error => console.error('Error fetching HOFs:', error));
+    
+    // Update last updated time
+    document.getElementById('last-updated').textContent = new Date().toLocaleString();
+}
+
+// Function to update stats display
+function updateStats(stats) {
+    document.getElementById('total-globals').textContent = stats.TotalGlobals;
+    document.getElementById('total-hofs').textContent = stats.TotalHofs;
+    document.getElementById('total-value').textContent = stats.TotalValue.toFixed(2);
+    document.getElementById('highest-value').textContent = stats.HighestValue.toFixed(2);
+    
+    // Update globals by type
+    const typeTable = document.getElementById('globals-by-type');
+    typeTable.innerHTML = '';
+    for (const [type, count] of Object.entries(stats.ByType)) {
+        const row = typeTable.insertRow();
+        const typeCell = row.insertCell(0);
+        const countCell = row.insertCell(1);
+        typeCell.textContent = type;
+        countCell.textContent = count;
+    }
+    
+    // Update globals by location
+    const locationTable = document.getElementById('globals-by-location');
+    locationTable.innerHTML = '';
+    for (const [location, count] of Object.entries(stats.ByLocation)) {
+        const row = locationTable.insertRow();
+        const locationCell = row.insertCell(0);
+        const countCell = row.insertCell(1);
+        locationCell.textContent = location;
+        countCell.textContent = count;
+    }
+}
+
+// Function to update globals table
+function updateGlobals(globals) {
+    const table = document.getElementById('latest-globals');
+    table.innerHTML = '';
+    
+    for (const global of globals) {
+        const row = table.insertRow();
+        const timeCell = row.insertCell(0);
+        const typeCell = row.insertCell(1);
+        const targetCell = row.insertCell(2);
+        const valueCell = row.insertCell(3);
+        
+        timeCell.textContent = formatDate(global.timestamp);
+        typeCell.textContent = global.type;
+        targetCell.textContent = global.target;
+        valueCell.textContent = global.value;
+    }
+}
+
+// Function to update HOFs table
+function updateHofs(hofs) {
+    const table = document.getElementById('latest-hofs');
+    table.innerHTML = '';
+    
+    for (const hof of hofs) {
+        const row = table.insertRow();
+        const timeCell = row.insertCell(0);
+        const typeCell = row.insertCell(1);
+        const targetCell = row.insertCell(2);
+        const valueCell = row.insertCell(3);
+        
+        timeCell.textContent = formatDate(hof.timestamp);
+        typeCell.textContent = hof.type;
+        targetCell.textContent = hof.target;
+        valueCell.textContent = hof.value;
+    }
+}
+
+// Helper function to format date
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString();
+}

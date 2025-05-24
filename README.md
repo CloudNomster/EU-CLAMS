@@ -13,6 +13,7 @@ This is a Go-based tool for tracking and analyzing Entropia Universe global even
 - Hall of Fame (HoF) detection
 - Automatic screenshots of globals and HoFs
 - Detailed statistics and analysis
+- Web server for viewing statistics in a browser
 
 ## Project Structure
 
@@ -55,6 +56,11 @@ Configuration can be provided in three ways:
    database_path: ./data/db.yaml
    player_name: YourCharacterName
    team_name: YourTeamName
+   enable_screenshots: true
+   screenshot_directory: ./data/screenshots
+   game_window_title: Entropia Universe Client
+   enable_web_server: false
+   web_server_port: 8080
    ```
 
 3. GUI Configuration Dialog (when using GUI mode):
@@ -78,6 +84,8 @@ Configuration can be provided in three ways:
 -screenshots bool        Enable screenshots for globals and HoFs (default: true)
 -screenshot-dir string   Directory to save screenshots (default: ./data/screenshots)
 -game-window string      Game window title (default: Entropia Universe Client)
+-web bool                Start a web server to view statistics (default: false)
+-web-port int            Port for the web server (default: 8080)
 ```
 
 ### Usage Modes
@@ -133,6 +141,18 @@ Displays comprehensive statistics about your globals:
 - Time-based analysis
 - Last update timestamp
 
+##### d. Web Server View
+```bash
+eu-clams -cli -web -player "YourCharacterName" -web-port 8080
+```
+Starts a web server that displays your statistics and globals:
+- Interactive, mobile-friendly web interface
+- Live updates via WebSockets when new globals are detected
+- Separate views for globals and Hall of Fame entries
+- JSON API endpoints for integration with other tools
+- Dark/light mode toggle
+- Accessible from any device on your network
+
 ### Data Storage
 
 The tool uses a YAML database file to store all global information:
@@ -183,6 +203,64 @@ When a global or Hall of Fame event is detected:
    - Global type (kill, craft, etc.)
    - Player or team name
    - Timestamp
+
+### Web Server
+
+EU-CLAMS includes a built-in web server that provides a browser-based dashboard for viewing your global and Hall of Fame statistics:
+
+#### Features:
+- Real-time updates via WebSockets when new globals are detected
+- Mobile-friendly responsive design
+- Dark/light mode toggle
+- Sortable and filterable tables of globals and HoF entries
+- Summary statistics and charts
+- Direct links to screenshots (if enabled)
+
+#### Configuration:
+
+The web server can be configured in three ways:
+
+1. Configuration file:
+   ```yaml
+   # In config.yaml
+   enable_web_server: true
+   web_server_port: 8080
+   ```
+
+2. Configuration GUI:
+   - Open the configuration dialog
+   - Check "Enable Web Server"
+   - Set the desired port number
+   - Save the configuration
+
+3. Command-line flags:
+   ```bash
+   eu-clams -web -web-port 9090
+   ```
+
+#### Starting the Web Server:
+
+1. **From GUI:**
+   - Click the "Launch Web Dashboard" button in the main interface
+   - A browser window will automatically open with the dashboard
+
+2. **From command line:**
+   ```bash
+   eu-clams -cli -web -player "YourCharacterName"
+   ```
+
+3. **Automatically on startup:**
+   - Set `enable_web_server: true` in your config.yaml
+   - Start the application normally
+
+#### API Endpoints:
+
+The web server provides several API endpoints:
+
+- `/api/stats` - Get summary statistics
+- `/api/globals` - Get all globals
+- `/api/hofs` - Get all Hall of Fame entries
+- `/ws` - WebSocket endpoint for real-time updates
 
 Example filename: `hof_kill_YourName_2025-05-16_10-00-00.png`
 
