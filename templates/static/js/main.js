@@ -95,7 +95,21 @@ function updateGlobals(globals) {
     const table = document.getElementById('latest-globals');
     table.innerHTML = '';
     
-    for (const global of globals) {
+    // Check if globals is an array or convert it to one if possible
+    const globalsArray = Array.isArray(globals) ? globals : 
+                        (globals && typeof globals === 'object') ? Object.values(globals) : [];
+    
+    // If globalsArray is empty, maybe add a "No data" row
+    if (globalsArray.length === 0) {
+        const row = table.insertRow();
+        const cell = row.insertCell(0);
+        cell.colSpan = 4;
+        cell.textContent = "No global data available";
+        cell.className = "no-data";
+        return;
+    }
+    
+    for (const global of globalsArray) {
         const row = table.insertRow();
         const timeCell = row.insertCell(0);
         const typeCell = row.insertCell(1);
@@ -114,7 +128,21 @@ function updateHofs(hofs) {
     const table = document.getElementById('latest-hofs');
     table.innerHTML = '';
     
-    for (const hof of hofs) {
+    // Check if hofs is an array or convert it to one if possible
+    const hofsArray = Array.isArray(hofs) ? hofs : 
+                     (hofs && typeof hofs === 'object') ? Object.values(hofs) : [];
+    
+    // If hofsArray is empty, maybe add a "No data" row
+    if (hofsArray.length === 0) {
+        const row = table.insertRow();
+        const cell = row.insertCell(0);
+        cell.colSpan = 4;
+        cell.textContent = "No HOF data available";
+        cell.className = "no-data";
+        return;
+    }
+    
+    for (const hof of hofsArray) {
         const row = table.insertRow();
         const timeCell = row.insertCell(0);
         const typeCell = row.insertCell(1);
