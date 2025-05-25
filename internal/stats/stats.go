@@ -1,60 +1,29 @@
 package stats
 
 import (
-	"eu-clams/internal/storage"
+	"eu-clams/internal/model"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 )
 
-// Stats holds statistical information about globals and HoFs
-type Stats struct {
-	TotalGlobals     int
-	TotalHofs        int
-	HighestValue     float64
-	HighestValueItem string
-	TotalValue       float64
-	ByType           map[string]int
-	ByLocation       map[string]int
-}
+// For backward compatibility
+type Stats = model.Stats
 
-// GenerateStats generates statistics from database entries
-func GenerateStats(db *storage.EntropyDB) Stats {
-	stats := Stats{
+// GenerateStats is a compatibility function that now delegates to the storage package
+// It's kept for backwards compatibility
+func GenerateStats(dbInterface interface{}) Stats {
+	// For compatibility with existing code, we now expect the DB to provide its own stats
+	if statsProvider, ok := dbInterface.(interface{ GetStatsData() model.Stats }); ok {
+		return statsProvider.GetStatsData()
+	}
+
+	// Return empty stats if the interface doesn't match
+	return Stats{
 		ByType:     make(map[string]int),
 		ByLocation: make(map[string]int),
 	}
-
-	globals := db.GetPlayerGlobals()
-	stats.TotalGlobals = len(globals)
-
-	for _, entry := range globals {
-		// Update total value
-		stats.TotalValue += entry.Value
-
-		// Track HoFs
-		if entry.IsHof {
-			stats.TotalHofs++
-		}
-
-		// Track highest value
-		if entry.Value > stats.HighestValue {
-			stats.HighestValue = entry.Value
-			stats.HighestValueItem = entry.Target
-		}
-
-		// Count by type
-		stats.ByType[entry.Type]++
-
-		// Count by location
-		if entry.Location != "" {
-			location := strings.TrimSuffix(entry.Location, "!")
-			stats.ByLocation[location]++
-		}
-	}
-
-	return stats
 }
 
 // FormatStatsReport formats statistics into a readable report

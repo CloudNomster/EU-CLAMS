@@ -7,6 +7,7 @@ import (
 	"eu-clams/src/service"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
@@ -55,20 +56,22 @@ func (g *MainGUI) Show() {
 }
 
 // createUI creates the user interface components
-func (g *MainGUI) createUI() {
-	// Create status label
+func (g *MainGUI) createUI() { // Create status label
 	g.statusLabel = widget.NewLabelWithStyle("Ready", fyne.TextAlignCenter, fyne.TextStyle{})
 	// Create main action buttons
 	configButton := widget.NewButtonWithIcon("Configure", theme.SettingsIcon(), g.showConfigDialog)
 	g.monitorButton = widget.NewButtonWithIcon("Start Monitoring", theme.MediaPlayIcon(), g.toggleMonitoring)
 	importButton := widget.NewButtonWithIcon("Import Log", theme.DownloadIcon(), g.importChatLog)
 	statsButton := widget.NewButtonWithIcon("View Statistics", theme.DocumentIcon(), g.showStats)
+	webServerButton := widget.NewButtonWithIcon("Launch Web Dashboard", theme.ComputerIcon(), g.startWebServer)
 
 	// Create button container
-	buttonsContainer := container.New(layout.NewGridLayout(2), configButton,
+	buttonsContainer := container.New(layout.NewGridLayout(3),
+		configButton,
 		g.monitorButton,
 		importButton,
 		statsButton,
+		webServerButton,
 	)
 
 	// Create info label
@@ -334,4 +337,84 @@ func (g *MainGUI) showStats() {
 	statsWindow.Resize(fyne.NewSize(600, 500))
 	statsWindow.CenterOnScreen()
 	statsWindow.Show()
+}
+
+// startWebServer launches the web server dashboard
+func (g *MainGUI) startWebServer() {
+	// Validate configuration
+	if g.config.PlayerName == "" {
+		dialog.ShowError(fmt.Errorf("player name is required"), g.mainWindow)
+		return
+	}
+
+	// Get database from existing service or create new one
+	var db *storage.EntropyDB
+	if g.dataService != nil {
+		db = g.dataService.GetDatabase()
+	} else {
+		// Initialize data processor service just to get database
+		tempService := service.NewDataProcessorService(g.log, g.config, "")
+		if err := tempService.Initialize(); err != nil {
+			dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
+			return
+		}
+		db = tempService.GetDatabase()
+	}
+
+	// Use port from config
+	webPort := g.config.WebServerPort
+	if webPort <= 0 {
+		webPort = 8080 // Default port
+	}
+
+	// Initialize web service
+	webService := service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
+	if err := webService.Initialize(); err != nil {
+		dialog.ShowError(fmt.Errorf("failed to initialize web server: %w", err), g.mainWindow)
+		return
+	}
+
+	// Show information dialog with the URL
+	url := fmt.Sprintf("http://localhost:%d", webPort)
+	info := fmt.Sprintf("Web dashboard starting at %s\n\nClick OK to open in your default browser.", url)
+	dialog.ShowInformation("Web Dashboard", info, g.mainWindow)
+
+	// Launch browser to the URL
+	go func() {
+		g.log.Info("Starting web server on port %d", webPort)
+		// Start the web server in the background
+		if err := webService.Run(); err != nil {
+			g.log.Error("Web server error: %v", err)
+			fyne.Do(func() {
+				dialog.ShowError(fmt.Errorf("web server error: %w", err), g.mainWindow)
+			})
+		}
+	}()
+
+	// Try to open the browser
+	openBrowser(url)
+}
+
+// openBrowser opens the default browser to the specified URL
+func openBrowser(url string) {
+	var err error
+
+	switch {
+	case hasCommand("rundll32"):
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case hasCommand("explorer"):
+		err = exec.Command("explorer", url).Start()
+	default:
+		err = fmt.Errorf("could not find browser command")
+	}
+
+	if err != nil {
+		fmt.Printf("Error opening browser: %v\n", err)
+	}
+}
+
+// hasCommand checks if a command exists
+func hasCommand(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }

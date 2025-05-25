@@ -1,0 +1,73 @@
+/* Main stylesheet for EU-CLAMS web interface */
+
+/* Additional styles can be added here */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: #09f;
+    animation: spin 1s ease-in-out infinite;
+    margin-left: 10px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Dark mode toggle */
+.dark-mode-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    cursor: pointer;
+    padding: 10px;
+    background: #333;
+    color: white;
+    border-radius: 5px;
+    z-index: 100;
+}
+
+/* Dark mode styles */
+body.dark-mode {
+    background-color: #222;
+    color: #eee;
+}
+
+body.dark-mode header {
+    background-color: #111;
+}
+
+body.dark-mode .card {
+    background-color: #333;
+    color: #eee;
+}
+
+body.dark-mode th {
+    background-color: #444;
+    color: #eee;
+}
+
+body.dark-mode tr:hover {
+    background-color: #444;
+}
+
+body.dark-mode .stat-card {
+    background-color: #444;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    
+    .card {
+        min-width: 100%;
+    }
+    
+    table {
+        font-size: 14px;
+    }
+}

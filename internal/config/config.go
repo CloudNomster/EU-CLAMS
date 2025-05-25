@@ -9,6 +9,8 @@ type Config struct {
 	EnableScreenshots   bool   `yaml:"enable_screenshots"`
 	ScreenshotDirectory string `yaml:"screenshot_directory"`
 	GameWindowTitle     string `yaml:"game_window_title"`
+	EnableWebServer     bool   `yaml:"enable_web_server"`
+	WebServerPort       int    `yaml:"web_server_port"`
 }
 
 // NewDefaultConfig returns a config with default values
@@ -20,5 +22,7 @@ func NewDefaultConfig() Config {
 		EnableScreenshots:   true,
 		ScreenshotDirectory: "./data/screenshots",
 		GameWindowTitle:     "Entropia Universe Client",
+		EnableWebServer:     false,
+		WebServerPort:       8080,
 	}
 }

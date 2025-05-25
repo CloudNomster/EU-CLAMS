@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "0.1.0"
+	version = "0.1.2"
 )
 
 var log = logger.New()
@@ -32,6 +32,8 @@ func main() { // Define command-line flags
 	enableScreenshots := flag.Bool("screenshots", true, "Enable screenshots for globals and HoFs")
 	screenshotDir := flag.String("screenshot-dir", "./data/screenshots", "Directory to save screenshots")
 	gameWindow := flag.String("game-window", "Entropia Universe Client", "Game window title")
+	webServer := flag.Bool("web", false, "Start a web server to view statistics")
+	webPort := flag.Int("web-port", 8080, "Port for the web server")
 	_ = flag.Bool("verbose", false, "Enable verbose logging") // Unused for now
 
 	// Parse command-line flags
@@ -123,7 +125,6 @@ func main() { // Define command-line flags
 			log.Error("Failed to initialize data processor: %v", err)
 			os.Exit(1)
 		}
-
 		// Run the data processor
 		if *importLog {
 			// One-time import mode
@@ -141,17 +142,8 @@ func main() { // Define command-line flags
 				}
 			}()
 
-			log.Info("Press Ctrl+C to stop monitoring...")
-
-			// Handle Ctrl+C gracefully
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-			<-c
-
-			log.Info("Stopping services...")
-			dataProcessor.Stop()
+			// Don't wait for Ctrl+C here, we'll do that after starting all services
 		}
-
 		// Show statistics if requested
 		if *showStats {
 			if cfg.PlayerName == "" {
@@ -168,6 +160,48 @@ func main() { // Define command-line flags
 			if err := statsService.Run(); err != nil {
 				log.Error("Failed to generate statistics: %v", err)
 				os.Exit(1)
+			}
+		} // Start web server if requested via flag or config
+		var webService *service.WebService
+		// Determine if web server should be started (from config or command line flag)
+		startWebServer := *webServer || cfg.EnableWebServer
+		webServerPort := *webPort
+		if cfg.EnableWebServer && !*webServer {
+			// Use config port if web server was not explicitly requested via command line
+			webServerPort = cfg.WebServerPort
+		}
+
+		if startWebServer {
+			if cfg.PlayerName == "" {
+				log.Error("Player name is required for web server. Use -player flag.")
+				os.Exit(1)
+			}
+
+			log.Info("Starting web server on port %d...", webServerPort)
+			webService = service.NewWebService(log, dataProcessor.GetDatabase(), cfg.PlayerName, cfg.TeamName, webServerPort)
+			if err := webService.Initialize(); err != nil {
+				log.Error("Failed to initialize web service: %v", err)
+				os.Exit(1)
+			} // Always start the web server in background
+			go func() {
+				if err := webService.Run(); err != nil {
+					log.Error("Web server error: %v", err)
+					os.Exit(1)
+				}
+			}()
+		} // If we have any background services running, wait for Ctrl+C
+		if *monitor || startWebServer || (!*importLog && !*showStats) {
+			log.Info("Press Ctrl+C to stop services...")
+
+			// Handle Ctrl+C gracefully
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+			<-c
+
+			log.Info("Stopping services...")
+			dataProcessor.Stop()
+			if webService != nil {
+				webService.Stop()
 			}
 		}
 

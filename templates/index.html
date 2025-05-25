@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EU-CLAMS Statistics</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/main.js" defer></script>
+    <style>
+        /* Inline styles for basic formatting */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        header {
+            background-color: #3a3a3a;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 300px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2980b9;
+        }
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2ecc71;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.16);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .notification.show {
+            opacity: 1;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>EU-CLAMS Statistics</h1>
+        <p>
+            Player: <strong>{{ .PlayerName }}</strong>
+            {{ if .TeamName }}
+            | Team: <strong>{{ .TeamName }}</strong>
+            {{ end }}
+        </p>
+        <p>Last updated: <span id="last-updated">{{ .Generated }}</span></p>
+    </header>
+
+    <div class="container">
+        <div class="card">
+            <h2>Summary Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div>Total Globals</div>
+                    <div class="stat-value" id="total-globals">{{ .Stats.TotalGlobals }}</div>
+                </div>
+                <div class="stat-card">
+                    <div>Total HoFs</div>
+                    <div class="stat-value" id="total-hofs">{{ .Stats.TotalHofs }}</div>
+                </div>
+                <div class="stat-card">
+                    <div>Total PED Value</div>
+                    <div class="stat-value" id="total-value">{{ .Stats.TotalValue }}</div>
+                </div>
+                <div class="stat-card">
+                    <div>Highest Value</div>
+                    <div class="stat-value" id="highest-value">{{ .Stats.HighestValue }}</div>
+                </div>
+            </div>
+
+            <h3>Globals by Type</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody id="globals-by-type">
+                    {{ range $type, $count := .Stats.ByType }}
+                    <tr>
+                        <td>{{ $type }}</td>
+                        <td>{{ $count }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+
+            <h3>Globals by Location</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Location</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody id="globals-by-location">
+                    {{ range $location, $count := .Stats.ByLocation }}
+                    <tr>
+                        <td>{{ $location }}</td>
+                        <td>{{ $count }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Latest Globals</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Value (PED)</th>
+                    </tr>
+                </thead>
+                <tbody id="latest-globals">
+                    {{ range .Globals }}
+                    <tr>
+                        <td>{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
+                        <td>{{ .Type }}</td>
+                        <td>{{ .Target }}</td>
+                        <td>{{ .Value }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Hall of Fame Entries</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Value (PED)</th>
+                    </tr>
+                </thead>
+                <tbody id="latest-hofs">
+                    {{ range .Hofs }}
+                    <tr>
+                        <td>{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
+                        <td>{{ .Type }}</td>
+                        <td>{{ .Target }}</td>
+                        <td>{{ .Value }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <footer>
+        <p>EU-CLAMS - Entropia Universe Global Events Tracker</p>
+    </footer>
+
+    <script>
+        // WebSocket connection
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        
+        ws.onopen = function() {
+            console.log('WebSocket connection established');
+        };
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log('WebSocket message received:', data);
+            
+            // Update last updated time
+            document.getElementById('last-updated').textContent = data.time;
+            
+            // Handle different event types
+            if (data.type === 'new_global') {
+                handleNewGlobal(data.data);
+            } else if (data.type === 'new_hof') {
+                handleNewHof(data.data);
+            } else if (data.type === 'stats_update') {
+                updateStats(data.data);
+            }
+            
+            // Show notification
+            showNotification(`New ${data.type.replace('_', ' ')} received!`);
+        };
+        
+        ws.onclose = function() {
+            console.log('WebSocket connection closed');
+            // Try to reconnect after 5 seconds
+            setTimeout(function() {
+                location.reload();
+            }, 5000);
+        };
+        
+        // Function to handle new global entry
+        function handleNewGlobal(global) {
+            const table = document.getElementById('latest-globals');
+            const row = table.insertRow(0);
+            
+            const timeCell = row.insertCell(0);
+            const typeCell = row.insertCell(1);
+            const targetCell = row.insertCell(2);
+            const valueCell = row.insertCell(3);
+            
+            timeCell.textContent = formatDate(global.timestamp);
+            typeCell.textContent = global.type;
+            targetCell.textContent = global.target;
+            valueCell.textContent = global.value;
+            
+            // Highlight the new row
+            row.style.backgroundColor = '#ffffd0';
+            setTimeout(() => {
+                row.style.backgroundColor = '';
+            }, 5000);
+        }
+        
+        // Function to handle new HoF entry
+        function handleNewHof(hof) {
+            // Add to HoF table
+            const table = document.getElementById('latest-hofs');
+            const row = table.insertRow(0);
+            
+            const timeCell = row.insertCell(0);
+            const typeCell = row.insertCell(1);
+            const targetCell = row.insertCell(2);
+            const valueCell = row.insertCell(3);
+            
+            timeCell.textContent = formatDate(hof.timestamp);
+            typeCell.textContent = hof.type;
+            targetCell.textContent = hof.target;
+            valueCell.textContent = hof.value;
+            
+            // Highlight the new row
+            row.style.backgroundColor = '#d0ffd0';
+            setTimeout(() => {
+                row.style.backgroundColor = '';
+            }, 5000);
+        }
+        
+        // Function to update statistics
+        function updateStats(stats) {
+            document.getElementById('total-globals').textContent = stats.TotalGlobals;
+            document.getElementById('total-hofs').textContent = stats.TotalHofs;
+            document.getElementById('total-value').textContent = stats.TotalValue.toFixed(2);
+            document.getElementById('highest-value').textContent = stats.HighestValue.toFixed(2);
+            
+            // Update globals by type
+            const typeTable = document.getElementById('globals-by-type');
+            typeTable.innerHTML = '';
+            for (const [type, count] of Object.entries(stats.ByType)) {
+                const row = typeTable.insertRow();
+                const typeCell = row.insertCell(0);
+                const countCell = row.insertCell(1);
+                typeCell.textContent = type;
+                countCell.textContent = count;
+            }
+            
+            // Update globals by location
+            const locationTable = document.getElementById('globals-by-location');
+            locationTable.innerHTML = '';
+            for (const [location, count] of Object.entries(stats.ByLocation)) {
+                const row = locationTable.insertRow();
+                const locationCell = row.insertCell(0);
+                const countCell = row.insertCell(1);
+                locationCell.textContent = location;
+                countCell.textContent = count;
+            }
+        }
+        
+        // Function to show notification
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 5000);
+        }
+        
+        // Helper function to format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+    </script>
+</body>
+</html>
