@@ -55,10 +55,10 @@ jobs:
       - name: Create release ZIP file
         run: |
           mkdir -p release
-          cp eu-clams.exe release/
+          # cp eu-clams.exe release/
           # No config file in the release as per requirement
           # If there are any other files that should be included in the release, add them here
-          zip -r eu-clams-${{ steps.get_version.outputs.VERSION }}.zip release/
+          zip -r eu-clams-${{ steps.get_version.outputs.VERSION }}.zip eu-clams.exe templates/
 
       - name: Create GitHub Release
         id: create_release
