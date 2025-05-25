@@ -12,15 +12,15 @@ import (
 
 // GlobalEntry represents a single global message
 type GlobalEntry struct {
-	Timestamp  time.Time `yaml:"timestamp"`
-	Type       string    `yaml:"type"` // e.g., "kill", "craft", "find"
-	PlayerName string    `yaml:"player"`
-	TeamName   string    `yaml:"team,omitempty"`
-	Target     string    `yaml:"target"` // creature/item name
-	Value      float64   `yaml:"value"`  // PED value
-	Location   string    `yaml:"location,omitempty"`
-	IsHof      bool      `yaml:"is_hof"`
-	RawMessage string    `yaml:"raw_message"`
+	Timestamp  time.Time `yaml:"timestamp" json:"timestamp"`
+	Type       string    `yaml:"type" json:"type"` // e.g., "kill", "craft", "find"
+	PlayerName string    `yaml:"player" json:"player"`
+	TeamName   string    `yaml:"team,omitempty" json:"team,omitempty"`
+	Target     string    `yaml:"target" json:"target"` // creature/item name
+	Value      float64   `yaml:"value" json:"value"`   // PED value
+	Location   string    `yaml:"location,omitempty" json:"location,omitempty"`
+	IsHof      bool      `yaml:"is_hof" json:"is_hof"`
+	RawMessage string    `yaml:"raw_message" json:"raw_message"`
 }
 
 // EntropyDB is the main structure for storing EU data

@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"eu-clams/internal/logger"
+	"eu-clams/internal/model"
 	"eu-clams/internal/storage"
 	"fmt"
 	"html/template"
@@ -204,8 +205,24 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 		globals = globals[len(globals)-limit:]
 	}
 
+	// Convert to JSON-friendly objects with properly formatted timestamps
+	jsonGlobals := make([]model.GlobalEntryJSON, len(globals))
+	for i, g := range globals {
+		jsonGlobals[i] = model.GlobalEntryJSON{
+			Timestamp:  g.Timestamp.Format(time.RFC3339),
+			Type:       g.Type,
+			PlayerName: g.PlayerName,
+			TeamName:   g.TeamName,
+			Target:     g.Target,
+			Value:      g.Value,
+			Location:   g.Location,
+			IsHof:      g.IsHof,
+			RawMessage: g.RawMessage,
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(globals)
+	json.NewEncoder(w).Encode(jsonGlobals)
 }
 
 // handleHofs handles the HOFs API endpoint
@@ -222,8 +239,24 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 		hofs = hofs[len(hofs)-limit:]
 	}
 
+	// Convert to JSON-friendly objects with properly formatted timestamps
+	jsonHofs := make([]model.GlobalEntryJSON, len(hofs))
+	for i, h := range hofs {
+		jsonHofs[i] = model.GlobalEntryJSON{
+			Timestamp:  h.Timestamp.Format(time.RFC3339),
+			Type:       h.Type,
+			PlayerName: h.PlayerName,
+			TeamName:   h.TeamName,
+			Target:     h.Target,
+			Value:      h.Value,
+			Location:   h.Location,
+			IsHof:      h.IsHof,
+			RawMessage: h.RawMessage,
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(hofs)
+	json.NewEncoder(w).Encode(jsonHofs)
 }
 
 // handleWebSocket handles WebSocket connections
@@ -258,10 +291,29 @@ func (s *WebService) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // BroadcastEvent sends an event to all connected WebSocket clients
 func (s *WebService) BroadcastEvent(eventType string, data interface{}) {
+	// Format timestamps for global and hof events
+	if eventType == "new_global" || eventType == "new_hof" {
+		if entry, ok := data.(*storage.GlobalEntry); ok {
+			// Convert to JSON-friendly object with properly formatted timestamp
+			jsonEntry := model.GlobalEntryJSON{
+				Timestamp:  entry.Timestamp.Format(time.RFC3339),
+				Type:       entry.Type,
+				PlayerName: entry.PlayerName,
+				TeamName:   entry.TeamName,
+				Target:     entry.Target,
+				Value:      entry.Value,
+				Location:   entry.Location,
+				IsHof:      entry.IsHof,
+				RawMessage: entry.RawMessage,
+			}
+			data = jsonEntry
+		}
+	}
+
 	event := map[string]interface{}{
 		"type": eventType,
 		"data": data,
-		"time": time.Now().Format("2006-01-02 15:04:05"),
+		"time": time.Now().Format(time.RFC3339),
 	}
 
 	payload, err := json.Marshal(event)

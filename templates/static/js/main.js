@@ -57,7 +57,7 @@ function refreshData() {
         .catch(error => console.error('Error fetching HOFs:', error));
     
     // Update last updated time
-    document.getElementById('last-updated').textContent = new Date().toLocaleString();
+    document.getElementById('last-updated').textContent = formatDate(new Date().toISOString());
 }
 
 // Function to update stats display
@@ -158,6 +158,17 @@ function updateHofs(hofs) {
 
 // Helper function to format date
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString();
+    // Check if the date is a ISO string or timestamp object
+    if (dateString && typeof dateString === 'object' && dateString.hasOwnProperty('seconds')) {
+        // Handle timestamp object
+        return new Date(dateString.seconds * 1000).toLocaleString();
+    } else if (dateString) {
+        // Handle ISO string or any other supported format
+        const date = new Date(dateString);
+        if (date instanceof Date && !isNaN(date)) {
+            return date.toLocaleString();
+        }
+    }
+    // Return a fallback if the date is invalid
+    return new Date().toLocaleString();
 }
