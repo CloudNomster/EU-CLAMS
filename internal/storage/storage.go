@@ -230,14 +230,6 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 				if logger != nil {
 					logger.Info("Added global from line %d (total: %d)", lineNum, count)
 				}
-			} else {
-				if logger != nil {
-					logger.Info("Skipped global from line %d (no match for player/team filters)", lineNum)
-				}
-			}
-		} else {
-			if logger != nil {
-				logger.Info("Line %d - Not a global message or failed to parse", lineNum)
 			}
 		}
 	}
@@ -351,14 +343,6 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 				if logger != nil {
 					logger.Info("Added global from line %d (total: %d)", lineNum, count)
 				}
-			} else {
-				if logger != nil {
-					logger.Info("Skipped global from line %d (no match for player/team filters)", lineNum)
-				}
-			}
-		} else {
-			if logger != nil {
-				logger.Info("Line %d - Not a global message or failed to parse", lineNum)
 			}
 		}
 	}

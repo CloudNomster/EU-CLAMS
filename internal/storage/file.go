@@ -16,12 +16,6 @@ func (db *EntropyDB) SaveDatabase(path string, logger *logger.Logger) error {
 		return fmt.Errorf("database is nil")
 	}
 
-	if logger != nil {
-		logger.Info("Saving database to: %s", path)
-		logger.Info("Database state: %d globals, PlayerName=%s, TeamName=%s",
-			len(db.Globals), db.PlayerName, db.TeamName)
-	}
-
 	// Ensure the directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -42,10 +36,6 @@ func (db *EntropyDB) SaveDatabase(path string, logger *logger.Logger) error {
 	// Verify the file was written
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("failed to verify file was written: %w", err)
-	}
-
-	if logger != nil {
-		logger.Info("Successfully saved database. File size: %d bytes", len(data))
 	}
 
 	return nil
