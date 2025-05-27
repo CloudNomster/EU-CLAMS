@@ -34,7 +34,7 @@ func main() { // Define command-line flags
 	gameWindow := flag.String("game-window", "Entropia Universe Client", "Game window title")
 	webServer := flag.Bool("web", false, "Start a web server to view statistics")
 	webPort := flag.Int("web-port", 8080, "Port for the web server")
-	_ = flag.Bool("verbose", false, "Enable verbose logging") // Unused for now
+	verbose := flag.Bool("verbose", false, "Enable verbose (debug) logging")
 
 	// Parse command-line flags
 	flag.Parse()
@@ -42,6 +42,12 @@ func main() { // Define command-line flags
 	if *showVersion {
 		fmt.Printf("EU-CLAMS v%s\n", version)
 		os.Exit(0)
+	}
+
+	// Initialize logger with appropriate debug level
+	if *verbose {
+		log = logger.NewWithDebug()
+		log.Debug("Debug logging enabled")
 	}
 
 	log.Info("EU-CLAMS starting...")
