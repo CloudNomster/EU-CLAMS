@@ -26,6 +26,7 @@ type MainGUI struct {
 	config      config.Config
 	log         *logger.Logger
 	dataService *service.DataProcessorService
+	webService  *service.WebService // Track the web service instance
 
 	// Status variables
 	isMonitoring  bool
@@ -53,6 +54,12 @@ func NewMainGUI(log *logger.Logger, cfg config.Config) *MainGUI {
 // Show displays the main GUI window
 func (g *MainGUI) Show() {
 	g.createUI()
+
+	// Set up cleanup handler for when the window is closed
+	g.mainWindow.SetCloseIntercept(func() {
+		g.Close()
+		g.mainWindow.Close()
+	})
 
 	// Start the web server if enabled in the config
 	if g.config.EnableWebServer {
@@ -302,6 +309,23 @@ func (g *MainGUI) importChatLog() {
 
 // initWebServer initializes and starts the web server if it's not already running
 func (g *MainGUI) initWebServer() (string, error) {
+	// If web service is already running, just return its URL
+	if g.webService != nil {
+		return fmt.Sprintf("http://localhost:%d", g.config.WebServerPort), nil
+	}
+
+	// Check if a web service for this port is already registered (started by CLI mode)
+	webPort := g.config.WebServerPort
+	if webPort <= 0 {
+		webPort = 8080 // Default port
+	}
+
+	if existingService := service.GetWebServiceByPort(webPort); existingService != nil {
+		g.log.Info("Found existing web service on port %d, reusing it", webPort)
+		g.webService = existingService
+		return fmt.Sprintf("http://localhost:%d", webPort), nil
+	}
+
 	// Validate configuration
 	if g.config.PlayerName == "" {
 		return "", fmt.Errorf("player name is required")
@@ -319,27 +343,25 @@ func (g *MainGUI) initWebServer() (string, error) {
 		}
 		db = tempService.GetDatabase()
 	}
-
-	// Use port from config
-	webPort := g.config.WebServerPort
-	if webPort <= 0 {
-		webPort = 8080 // Default port
-	}
+	// Port is already set above
+	// No need to redefine webPort here
 
 	// Initialize web service if it's enabled in the config
-	webService := service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
-	if err := webService.Initialize(); err != nil {
+	g.webService = service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
+	if err := g.webService.Initialize(); err != nil {
+		g.webService = nil
 		return "", fmt.Errorf("failed to initialize web server: %w", err)
 	}
 
 	// Start the web server in the background
 	go func() {
 		g.log.Info("Starting web server on port %d", webPort)
-		if err := webService.Run(); err != nil {
+		if err := g.webService.Run(); err != nil {
 			g.log.Error("Web server error: %v", err)
 			fyne.Do(func() {
 				dialog.ShowError(fmt.Errorf("web server error: %w", err), g.mainWindow)
 			})
+			g.webService = nil // Clear the reference if it fails to start
 		}
 	}()
 
@@ -356,14 +378,23 @@ func (g *MainGUI) startWebServer(showDialog bool) {
 		return
 	}
 
-	// Use port from config
-	webPort := g.config.WebServerPort
-	if webPort <= 0 {
-		webPort = 8080 // Default port
+	// Start the web server if it's not already running
+	var url string
+	if g.webService == nil {
+		var err error
+		url, err = g.initWebServer()
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("failed to start web server: %w", err), g.mainWindow)
+			return
+		}
+	} else {
+		// Use port from config for existing web service
+		webPort := g.config.WebServerPort
+		if webPort <= 0 {
+			webPort = 8080 // Default port
+		}
+		url = fmt.Sprintf("http://localhost:%d", webPort)
 	}
-
-	// Generate URL for the web stats
-	url := fmt.Sprintf("http://localhost:%d", webPort)
 
 	// If showing dialog was requested, show information dialog
 	if showDialog {
@@ -620,4 +651,23 @@ func (g *MainGUI) createStatsTab() fyne.CanvasObject {
 	)
 
 	return content
+}
+
+// Close properly cleans up resources before closing the application
+func (g *MainGUI) Close() {
+	// Stop the monitoring if active
+	if g.isMonitoring && g.dataService != nil {
+		g.stopMonitoring()
+	}
+
+	// Stop the web service if it's running
+	if g.webService != nil {
+		g.log.Info("Stopping web service...")
+		if err := g.webService.Stop(); err != nil {
+			g.log.Error("Error stopping web service: %v", err)
+		}
+		g.webService = nil
+	}
+
+	g.log.Info("Application closing")
 }
