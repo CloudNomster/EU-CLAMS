@@ -53,6 +53,17 @@ func NewMainGUI(log *logger.Logger, cfg config.Config) *MainGUI {
 // Show displays the main GUI window
 func (g *MainGUI) Show() {
 	g.createUI()
+
+	// Start the web server if enabled in the config
+	if g.config.EnableWebServer {
+		url, err := g.initWebServer()
+		if err != nil {
+			g.log.Error("Failed to start web server: %v", err)
+		} else {
+			g.log.Info("Web server started successfully at %s", url)
+		}
+	}
+
 	g.mainWindow.ShowAndRun()
 }
 
@@ -60,11 +71,10 @@ func (g *MainGUI) Show() {
 func (g *MainGUI) createUI() {
 	// Create status label
 	g.statusLabel = widget.NewLabelWithStyle("Ready", fyne.TextAlignCenter, fyne.TextStyle{})
-
 	// Create main action buttons
 	g.monitorButton = widget.NewButtonWithIcon("Start Monitoring", theme.MediaPlayIcon(), g.toggleMonitoring)
 	importButton := widget.NewButtonWithIcon("Import Log", theme.DownloadIcon(), g.importChatLog)
-	webServerButton := widget.NewButtonWithIcon("Launch Web Dashboard", theme.ComputerIcon(), g.startWebServer)
+	webServerButton := widget.NewButtonWithIcon("Open Webstats", theme.ComputerIcon(), func() { g.startWebServer(true) })
 
 	// Create button container
 	buttonsContainer := container.New(layout.NewGridLayout(2),
@@ -290,12 +300,11 @@ func (g *MainGUI) importChatLog() {
 	}, g.mainWindow)
 }
 
-// startWebServer launches the web server dashboard
-func (g *MainGUI) startWebServer() {
+// initWebServer initializes and starts the web server if it's not already running
+func (g *MainGUI) initWebServer() (string, error) {
 	// Validate configuration
 	if g.config.PlayerName == "" {
-		dialog.ShowError(fmt.Errorf("player name is required"), g.mainWindow)
-		return
+		return "", fmt.Errorf("player name is required")
 	}
 
 	// Get database from existing service or create new one
@@ -306,8 +315,7 @@ func (g *MainGUI) startWebServer() {
 		// Initialize data processor service just to get database
 		tempService := service.NewDataProcessorService(g.log, g.config, "")
 		if err := tempService.Initialize(); err != nil {
-			dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
-			return
+			return "", fmt.Errorf("failed to initialize data processor: %w", err)
 		}
 		db = tempService.GetDatabase()
 	}
@@ -318,22 +326,15 @@ func (g *MainGUI) startWebServer() {
 		webPort = 8080 // Default port
 	}
 
-	// Initialize web service
+	// Initialize web service if it's enabled in the config
 	webService := service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
 	if err := webService.Initialize(); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to initialize web server: %w", err), g.mainWindow)
-		return
+		return "", fmt.Errorf("failed to initialize web server: %w", err)
 	}
 
-	// Show information dialog with the URL
-	url := fmt.Sprintf("http://localhost:%d", webPort)
-	info := fmt.Sprintf("Web dashboard starting at %s\n\nClick OK to open in your default browser.", url)
-	dialog.ShowInformation("Web Dashboard", info, g.mainWindow)
-
-	// Launch browser to the URL
+	// Start the web server in the background
 	go func() {
 		g.log.Info("Starting web server on port %d", webPort)
-		// Start the web server in the background
 		if err := webService.Run(); err != nil {
 			g.log.Error("Web server error: %v", err)
 			fyne.Do(func() {
@@ -341,6 +342,34 @@ func (g *MainGUI) startWebServer() {
 			})
 		}
 	}()
+
+	// Return the URL to the web stats
+	return fmt.Sprintf("http://localhost:%d", webPort), nil
+}
+
+// startWebServer launches the web browser to the web stats
+func (g *MainGUI) startWebServer(showDialog bool) {
+	// Check if web server is enabled in the config
+	if !g.config.EnableWebServer {
+		// If not enabled, show an error dialog
+		dialog.ShowError(fmt.Errorf("web server is not enabled in the configuration"), g.mainWindow)
+		return
+	}
+
+	// Use port from config
+	webPort := g.config.WebServerPort
+	if webPort <= 0 {
+		webPort = 8080 // Default port
+	}
+
+	// Generate URL for the web stats
+	url := fmt.Sprintf("http://localhost:%d", webPort)
+
+	// If showing dialog was requested, show information dialog
+	if showDialog {
+		info := fmt.Sprintf("Opening web statistics at %s", url)
+		dialog.ShowInformation("Web Statistics", info, g.mainWindow)
+	}
 
 	// Try to open the browser
 	openBrowser(url)
