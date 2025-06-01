@@ -167,8 +167,8 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 	}
 
 	if logger != nil {
-		logger.Info("Processing chat log from offset %d (%.1f%%)", offset, (float64(offset)/totalSize)*100)
-		logger.Info("Player filter: %s, Team filter: %s", db.PlayerName, db.TeamName)
+		logger.Debug("Processing chat log from offset %d (%.1f%%)", offset, (float64(offset)/totalSize)*100)
+		logger.Debug("Player filter: %s, Team filter: %s", db.PlayerName, db.TeamName)
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -239,12 +239,12 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 	}
 
 	if logger != nil && count > 0 {
-		logger.Info("Finished processing chat log from offset. Added %d new globals.", count)
+		logger.Debug("Finished processing chat log from offset. Added %d new globals.", count)
 
 		// Log all stored globals for debugging
 		logger.Info("Stored globals (%d):", len(db.Globals))
 		for i, g := range db.Globals {
-			logger.Info("%d. Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
+			logger.Debug("%d. Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
 				i+1, g.Type, g.PlayerName, g.TeamName, g.Target, g.Value)
 		}
 	}
@@ -279,8 +279,8 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 	totalSize := float64(fileInfo.Size())
 
 	if logger != nil {
-		logger.Info("Starting to process chat log: %s (size: %d)", logPath, fileInfo.Size())
-		logger.Info("Player filter: %s, Team filter: %s", db.PlayerName, db.TeamName)
+		logger.Debug("Starting to process chat log: %s (size: %d)", logPath, fileInfo.Size())
+		logger.Debug("Player filter: %s, Team filter: %s", db.PlayerName, db.TeamName)
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -311,7 +311,7 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 
 		if entry != nil {
 			if logger != nil {
-				logger.Info("Line %d - Found global: Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
+				logger.Debug("Line %d - Found global: Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
 					lineNum, entry.Type, entry.PlayerName, entry.TeamName, entry.Target, entry.Value)
 			} // Include the entry if any of these are true:
 			// 1. No player/team filtering is enabled
@@ -351,12 +351,12 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 	}
 
 	if logger != nil {
-		logger.Info("Finished processing chat log. Found %d globals.", count)
+		logger.Debug("Finished processing chat log. Found %d globals.", count)
 
 		// Log all stored globals for debugging
-		logger.Info("Stored globals (%d):", len(db.Globals))
+		logger.Debug("Stored globals (%d):", len(db.Globals))
 		for i, g := range db.Globals {
-			logger.Info("%d. Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
+			logger.Debug("%d. Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
 				i+1, g.Type, g.PlayerName, g.TeamName, g.Target, g.Value)
 		}
 	}

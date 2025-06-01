@@ -151,13 +151,13 @@ func (s *DataProcessorService) processLogFile() error {
 		s.log.Info("Processed %d global entries", count)
 	} else if fileInfo.Size() > s.db.LastProcessedSize {
 		// Process only new content
-		s.log.Info("Processing new entries in chat log")
+		s.log.Debug("Processing new entries in chat log")
 		count, err := s.db.ProcessChatLogFromOffset(s.chatLogPath, s.db.LastProcessedSize, nil, s.log)
 		if err != nil {
 			return fmt.Errorf("failed to process new entries: %w", err)
 		}
 		if count > 0 {
-			s.log.Info("Processed %d new global entries", count)
+			s.log.Debug("Processed %d new global entries", count)
 
 			// Get the new globals that were added
 			newGlobals := s.db.Globals[oldGlobalsCount:]
