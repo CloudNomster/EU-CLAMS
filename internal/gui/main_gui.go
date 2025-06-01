@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -25,6 +26,7 @@ type MainGUI struct {
 	config      config.Config
 	log         *logger.Logger
 	dataService *service.DataProcessorService
+	webService  *service.WebService // Track the web service instance
 
 	// Status variables
 	isMonitoring  bool
@@ -52,25 +54,39 @@ func NewMainGUI(log *logger.Logger, cfg config.Config) *MainGUI {
 // Show displays the main GUI window
 func (g *MainGUI) Show() {
 	g.createUI()
+
+	// Set up cleanup handler for when the window is closed
+	g.mainWindow.SetCloseIntercept(func() {
+		g.Close()
+		g.mainWindow.Close()
+	})
+
+	// Start the web server if enabled in the config
+	if g.config.EnableWebServer {
+		url, err := g.initWebServer()
+		if err != nil {
+			g.log.Error("Failed to start web server: %v", err)
+		} else {
+			g.log.Info("Web server started successfully at %s", url)
+		}
+	}
+
 	g.mainWindow.ShowAndRun()
 }
 
 // createUI creates the user interface components
-func (g *MainGUI) createUI() { // Create status label
+func (g *MainGUI) createUI() {
+	// Create status label
 	g.statusLabel = widget.NewLabelWithStyle("Ready", fyne.TextAlignCenter, fyne.TextStyle{})
 	// Create main action buttons
-	configButton := widget.NewButtonWithIcon("Configure", theme.SettingsIcon(), g.showConfigDialog)
 	g.monitorButton = widget.NewButtonWithIcon("Start Monitoring", theme.MediaPlayIcon(), g.toggleMonitoring)
 	importButton := widget.NewButtonWithIcon("Import Log", theme.DownloadIcon(), g.importChatLog)
-	statsButton := widget.NewButtonWithIcon("View Statistics", theme.DocumentIcon(), g.showStats)
-	webServerButton := widget.NewButtonWithIcon("Launch Web Dashboard", theme.ComputerIcon(), g.startWebServer)
+	webServerButton := widget.NewButtonWithIcon("Open Webstats", theme.ComputerIcon(), func() { g.startWebServer(true) })
 
 	// Create button container
-	buttonsContainer := container.New(layout.NewGridLayout(3),
-		configButton,
+	buttonsContainer := container.New(layout.NewGridLayout(2),
 		g.monitorButton,
 		importButton,
-		statsButton,
 		webServerButton,
 	)
 
@@ -101,15 +117,29 @@ func (g *MainGUI) createUI() { // Create status label
 		infoPanel,
 		statusPanel,
 	)
-	// Main content
-	content := container.NewVBox(
-		widget.NewLabelWithStyle("EU-CLAMS", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+
+	// Create main content (Dashboard tab)
+	dashboardContent := container.NewVBox(
+		widget.NewLabelWithStyle("EU-CLAMS Dashboard", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		boxesContainer,
 		buttonsContainer,
 	)
 
-	g.mainWindow.SetContent(content)
-	g.mainWindow.Resize(fyne.NewSize(600, 400))
+	// Create configuration tab content
+	configContent := g.createConfigTab()
+
+	// Create statistics tab content
+	statsContent := g.createStatsTab()
+
+	// Create tabs container
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon("Dashboard", theme.HomeIcon(), dashboardContent),
+		container.NewTabItemWithIcon("Configuration", theme.SettingsIcon(), configContent),
+		container.NewTabItemWithIcon("Statistics", theme.DocumentIcon(), statsContent),
+	)
+
+	g.mainWindow.SetContent(tabs)
+	g.mainWindow.Resize(fyne.NewSize(600, 500))
 	g.mainWindow.CenterOnScreen()
 }
 
@@ -119,27 +149,6 @@ func valueOrEmpty(value, defaultValue string) string {
 		return defaultValue
 	}
 	return value
-}
-
-// showConfigDialog shows the configuration dialog
-func (g *MainGUI) showConfigDialog() {
-	configGUI := NewConfigGUI(g.log, g.config)
-	configGUI.SetSaveCallback(func(newConfig config.Config) {
-		g.config = newConfig
-		g.log.Info("Updated configuration from GUI")
-
-		// Update the info label
-		infoText := fmt.Sprintf("Player: %s\nTeam: %s\n",
-			valueOrEmpty(g.config.PlayerName, "Not set"),
-			valueOrEmpty(g.config.TeamName, "Not set"))
-		g.infoLabel.SetText(infoText)
-
-		// Update services if needed
-		if g.dataService != nil {
-			// Reload with new config
-		}
-	})
-	configGUI.Show()
 }
 
 // toggleMonitoring starts or stops monitoring
@@ -156,7 +165,8 @@ func (g *MainGUI) toggleMonitoring() {
 }
 
 // startMonitoring starts monitoring the chat log
-func (g *MainGUI) startMonitoring() { // Validate configuration
+func (g *MainGUI) startMonitoring() {
+	// Validate configuration
 	if g.config.PlayerName == "" {
 		dialog.ShowError(fmt.Errorf("player name is required"), g.mainWindow)
 		return
@@ -191,8 +201,10 @@ func (g *MainGUI) startMonitoringWithPath(chatLogPath string) {
 	if err := g.dataService.Initialize(); err != nil {
 		dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
 		return
-	} // Update UI on the main thread first
+	}
+	// Update UI on the main thread first
 	g.statusLabel.SetText("Monitoring chat log...")
+
 	// Start monitoring asynchronously
 	go func() {
 		if err := g.dataService.Run(); err != nil {
@@ -238,6 +250,7 @@ func (g *MainGUI) importChatLog() {
 			dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
 			return
 		}
+
 		// Show progress dialog using the recommended approach
 		progressContent := container.NewVBox(
 			widget.NewLabel("Processing chat log..."),
@@ -254,12 +267,15 @@ func (g *MainGUI) importChatLog() {
 			// Set up progress monitoring
 			progressChan := make(chan float64, 10)
 			go func() {
-				for p := range progressChan { // Thread-safe UI update
+				for p := range progressChan {
+					// Thread-safe UI update
 					fyne.Do(func() {
 						progressBar.SetValue(p / 100.0)
 					})
 				}
-			}() // Run service - one-time import, don't start monitoring
+			}()
+
+			// Run service - one-time import, don't start monitoring
 			dataService.SetProgressChannel(progressChan)
 			if err := dataService.ProcessLogOnly(); err != nil {
 				g.log.Error("Import error: %v", err)
@@ -274,7 +290,9 @@ func (g *MainGUI) importChatLog() {
 					})
 				}()
 				return
-			} // Signal success back to main thread
+			}
+
+			// Signal success back to main thread
 			doneChan := make(chan struct{}, 1)
 			doneChan <- struct{}{}
 			go func() {
@@ -289,107 +307,100 @@ func (g *MainGUI) importChatLog() {
 	}, g.mainWindow)
 }
 
-// showStats shows the statistics
-func (g *MainGUI) showStats() {
-	// Validate configuration
-	if g.config.PlayerName == "" {
-		dialog.ShowError(fmt.Errorf("player name is required"), g.mainWindow)
-		return
+// initWebServer initializes and starts the web server if it's not already running
+func (g *MainGUI) initWebServer() (string, error) {
+	// If web service is already running, just return its URL
+	if g.webService != nil {
+		return fmt.Sprintf("http://localhost:%d", g.config.WebServerPort), nil
 	}
 
-	// Get database from existing service or create new one
-	var db *storage.EntropyDB
-	if g.dataService != nil {
-		db = g.dataService.GetDatabase()
-	} else {
-		// Initialize data processor service just to get database
-		tempService := service.NewDataProcessorService(g.log, g.config, "")
-		if err := tempService.Initialize(); err != nil {
-			dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
-			return
-		}
-		db = tempService.GetDatabase()
-	}
-
-	// Initialize stats service
-	statsService := service.NewStatsService(g.log, db, g.config.PlayerName, g.config.TeamName)
-	if err := statsService.Initialize(); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to initialize stats service: %w", err), g.mainWindow)
-		return
-	}
-
-	// Generate stats text
-	statsData := statsService.GenerateStats()
-	statsText := statsService.FormatStatsReport(statsData)
-	// Show stats dialog
-	statsWindow := g.app.NewWindow("Statistics")
-
-	statsScroll := container.NewScroll(widget.NewLabel(statsText))
-	statsScroll.SetMinSize(fyne.NewSize(500, 400))
-
-	closeButton := widget.NewButton("Close", func() {
-		statsWindow.Close()
-	})
-
-	content := container.NewBorder(nil, container.NewHBox(layout.NewSpacer(), closeButton), nil, nil, statsScroll)
-
-	statsWindow.SetContent(content)
-	statsWindow.Resize(fyne.NewSize(600, 500))
-	statsWindow.CenterOnScreen()
-	statsWindow.Show()
-}
-
-// startWebServer launches the web server dashboard
-func (g *MainGUI) startWebServer() {
-	// Validate configuration
-	if g.config.PlayerName == "" {
-		dialog.ShowError(fmt.Errorf("player name is required"), g.mainWindow)
-		return
-	}
-
-	// Get database from existing service or create new one
-	var db *storage.EntropyDB
-	if g.dataService != nil {
-		db = g.dataService.GetDatabase()
-	} else {
-		// Initialize data processor service just to get database
-		tempService := service.NewDataProcessorService(g.log, g.config, "")
-		if err := tempService.Initialize(); err != nil {
-			dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
-			return
-		}
-		db = tempService.GetDatabase()
-	}
-
-	// Use port from config
+	// Check if a web service for this port is already registered (started by CLI mode)
 	webPort := g.config.WebServerPort
 	if webPort <= 0 {
 		webPort = 8080 // Default port
 	}
 
-	// Initialize web service
-	webService := service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
-	if err := webService.Initialize(); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to initialize web server: %w", err), g.mainWindow)
-		return
+	if existingService := service.GetWebServiceByPort(webPort); existingService != nil {
+		g.log.Info("Found existing web service on port %d, reusing it", webPort)
+		g.webService = existingService
+		return fmt.Sprintf("http://localhost:%d", webPort), nil
 	}
 
-	// Show information dialog with the URL
-	url := fmt.Sprintf("http://localhost:%d", webPort)
-	info := fmt.Sprintf("Web dashboard starting at %s\n\nClick OK to open in your default browser.", url)
-	dialog.ShowInformation("Web Dashboard", info, g.mainWindow)
+	// Validate configuration
+	if g.config.PlayerName == "" {
+		return "", fmt.Errorf("player name is required")
+	}
 
-	// Launch browser to the URL
+	// Get database from existing service or create new one
+	var db *storage.EntropyDB
+	if g.dataService != nil {
+		db = g.dataService.GetDatabase()
+	} else {
+		// Initialize data processor service just to get database
+		tempService := service.NewDataProcessorService(g.log, g.config, "")
+		if err := tempService.Initialize(); err != nil {
+			return "", fmt.Errorf("failed to initialize data processor: %w", err)
+		}
+		db = tempService.GetDatabase()
+	}
+	// Port is already set above
+	// No need to redefine webPort here
+
+	// Initialize web service if it's enabled in the config
+	g.webService = service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
+	if err := g.webService.Initialize(); err != nil {
+		g.webService = nil
+		return "", fmt.Errorf("failed to initialize web server: %w", err)
+	}
+
+	// Start the web server in the background
 	go func() {
 		g.log.Info("Starting web server on port %d", webPort)
-		// Start the web server in the background
-		if err := webService.Run(); err != nil {
+		if err := g.webService.Run(); err != nil {
 			g.log.Error("Web server error: %v", err)
 			fyne.Do(func() {
 				dialog.ShowError(fmt.Errorf("web server error: %w", err), g.mainWindow)
 			})
+			g.webService = nil // Clear the reference if it fails to start
 		}
 	}()
+
+	// Return the URL to the web stats
+	return fmt.Sprintf("http://localhost:%d", webPort), nil
+}
+
+// startWebServer launches the web browser to the web stats
+func (g *MainGUI) startWebServer(showDialog bool) {
+	// Check if web server is enabled in the config
+	if !g.config.EnableWebServer {
+		// If not enabled, show an error dialog
+		dialog.ShowError(fmt.Errorf("web server is not enabled in the configuration"), g.mainWindow)
+		return
+	}
+
+	// Start the web server if it's not already running
+	var url string
+	if g.webService == nil {
+		var err error
+		url, err = g.initWebServer()
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("failed to start web server: %w", err), g.mainWindow)
+			return
+		}
+	} else {
+		// Use port from config for existing web service
+		webPort := g.config.WebServerPort
+		if webPort <= 0 {
+			webPort = 8080 // Default port
+		}
+		url = fmt.Sprintf("http://localhost:%d", webPort)
+	}
+
+	// If showing dialog was requested, show information dialog
+	if showDialog {
+		info := fmt.Sprintf("Opening web statistics at %s", url)
+		dialog.ShowInformation("Web Statistics", info, g.mainWindow)
+	}
 
 	// Try to open the browser
 	openBrowser(url)
@@ -417,4 +428,246 @@ func openBrowser(url string) {
 func hasCommand(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
+}
+
+// createConfigTab creates the content for the configuration tab
+func (g *MainGUI) createConfigTab() fyne.CanvasObject {
+	// Create form fields
+	playerNameEntry := widget.NewEntry()
+	playerNameEntry.SetText(g.config.PlayerName)
+	playerNameEntry.SetPlaceHolder("Enter your character name")
+
+	teamNameEntry := widget.NewEntry()
+	teamNameEntry.SetText(g.config.TeamName)
+	teamNameEntry.SetPlaceHolder("Enter your team name (optional)")
+
+	dbPathEntry := widget.NewEntry()
+	dbPathEntry.SetText(g.config.DatabasePath)
+	dbPathEntry.SetPlaceHolder("Path to database file")
+
+	chatLogPathEntry := widget.NewEntry()
+	chatLogPathEntry.SetPlaceHolder("Path to EU chat log file")
+	defaultChatLogPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
+	if _, err := os.Stat(defaultChatLogPath); err == nil {
+		chatLogPathEntry.SetText(defaultChatLogPath)
+	}
+
+	// Create screenshot related fields
+	enableScreenshotsCheck := widget.NewCheck("", nil)
+	enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
+
+	screenshotDirEntry := widget.NewEntry()
+	screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
+	screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
+
+	gameWindowTitleEntry := widget.NewEntry()
+	gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
+	gameWindowTitleEntry.SetPlaceHolder("Entropia Universe Client")
+
+	// Create web server related fields
+	enableWebServerCheck := widget.NewCheck("", nil)
+	enableWebServerCheck.SetChecked(g.config.EnableWebServer)
+
+	webServerPortEntry := widget.NewEntry()
+	webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
+	webServerPortEntry.SetPlaceHolder("8080")
+
+	// Create buttons for file selection
+	dbPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			dbPathEntry.SetText(uri.URI().Path())
+		}, g.mainWindow)
+	})
+
+	chatLogPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			chatLogPathEntry.SetText(uri.URI().Path())
+		}, g.mainWindow)
+	})
+
+	screenshotDirButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			screenshotDirEntry.SetText(uri.Path())
+		}, g.mainWindow)
+	})
+
+	// Create containers with browse buttons
+	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, dbPathEntry)
+	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, chatLogPathEntry)
+	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, screenshotDirEntry)
+
+	// Create form
+	form := &widget.Form{
+		Items: []*widget.FormItem{
+			{Text: "Player Name", Widget: playerNameEntry, HintText: "Your character name in Entropia Universe"},
+			{Text: "Team Name", Widget: teamNameEntry, HintText: "Your team name (optional)"},
+			{Text: "Database Path", Widget: dbPathContainer, HintText: "Where to store your globals database"},
+			{Text: "Chat Log Path", Widget: chatLogPathContainer, HintText: "Path to Entropia Universe chat.log"},
+			{Text: "Enable Screenshots", Widget: enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
+			{Text: "Screenshot Directory", Widget: screenshotDirContainer, HintText: "Where to save screenshots"},
+			{Text: "Game Window Title", Widget: gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
+			{Text: "Enable Web Server", Widget: enableWebServerCheck, HintText: "Start a web server to view statistics"},
+			{Text: "Web Server Port", Widget: webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
+		},
+		OnSubmit: func() {
+			// Update configuration values from form fields
+			g.config.PlayerName = playerNameEntry.Text
+			g.config.TeamName = teamNameEntry.Text
+			g.config.DatabasePath = dbPathEntry.Text
+			g.config.EnableScreenshots = enableScreenshotsCheck.Checked
+			g.config.ScreenshotDirectory = screenshotDirEntry.Text
+			g.config.GameWindowTitle = gameWindowTitleEntry.Text
+			g.config.EnableWebServer = enableWebServerCheck.Checked
+
+			// Convert web server port from string to int
+			webServerPort := 8080 // Default port
+			if port, err := strconv.Atoi(webServerPortEntry.Text); err == nil && port > 0 {
+				webServerPort = port
+			} else if webServerPortEntry.Text != "" {
+				dialog.ShowError(fmt.Errorf("invalid web server port: must be a positive number"), g.mainWindow)
+				return
+			}
+			g.config.WebServerPort = webServerPort
+
+			// Save to file
+			err := g.config.SaveConfigToFile("config.yaml")
+			if err != nil {
+				dialog.ShowError(err, g.mainWindow)
+				g.log.Error("Failed to save configuration: %v", err)
+				return
+			}
+
+			g.log.Info("Configuration saved successfully")
+
+			// Update the info label in the dashboard
+			infoText := fmt.Sprintf("Player: %s\nTeam: %s\n",
+				valueOrEmpty(g.config.PlayerName, "Not set"),
+				valueOrEmpty(g.config.TeamName, "Not set"))
+			g.infoLabel.SetText(infoText)
+
+			// Update services if needed
+			if g.dataService != nil {
+				// Reload with new config
+			}
+
+			// Show success message
+			dialog.ShowInformation("Success", "Configuration saved successfully", g.mainWindow)
+		},
+		SubmitText: "Save Configuration",
+	}
+
+	// Main content
+	return container.NewVBox(
+		widget.NewLabelWithStyle("EU-CLAMS Configuration", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		form,
+	)
+}
+
+// createStatsTab creates the content for the statistics tab
+func (g *MainGUI) createStatsTab() fyne.CanvasObject {
+	// Create a label for statistics content
+	statsLabel := widget.NewLabel("Click 'Refresh Statistics' to view the latest statistics")
+
+	// Create a scroll container for the stats text
+	statsScroll := container.NewScroll(statsLabel)
+	statsScroll.SetMinSize(fyne.NewSize(500, 400))
+
+	// Create a refresh button
+	refreshButton := widget.NewButtonWithIcon("Refresh Statistics", theme.ViewRefreshIcon(), func() {
+		// Create a progress dialog using the recommended approach
+		progressContent := container.NewVBox(
+			widget.NewLabel("Loading statistics data..."),
+			widget.NewProgressBar(),
+		)
+		progressDialog := dialog.NewCustomWithoutButtons("Statistics", progressContent, g.mainWindow)
+		progressDialog.Show()
+
+		// Process in background
+		go func() {
+			// Validate configuration first
+			if g.config.PlayerName == "" {
+				fyne.Do(func() {
+					progressDialog.Hide()
+					statsLabel.SetText("Error: Player name is required in configuration")
+				})
+				return
+			}
+
+			// Get database
+			var db *storage.EntropyDB
+			if g.dataService != nil {
+				db = g.dataService.GetDatabase()
+			} else {
+				// Initialize data processor service just to get database
+				tempService := service.NewDataProcessorService(g.log, g.config, "")
+				if err := tempService.Initialize(); err != nil {
+					g.log.Error("Failed to initialize data processor: %v", err)
+					fyne.Do(func() {
+						progressDialog.Hide()
+						statsLabel.SetText("Error: Failed to initialize data processor")
+					})
+					return
+				}
+				db = tempService.GetDatabase()
+			}
+
+			// Initialize stats service
+			statsService := service.NewStatsService(g.log, db, g.config.PlayerName, g.config.TeamName)
+			if err := statsService.Initialize(); err != nil {
+				g.log.Error("Failed to initialize stats service: %v", err)
+				fyne.Do(func() {
+					progressDialog.Hide()
+					statsLabel.SetText("Error: Failed to initialize stats service")
+				})
+				return
+			}
+
+			// Generate stats text
+			statsData := statsService.GenerateStats()
+			statsText := statsService.FormatStatsReport(statsData)
+
+			// Update the stats label on the main thread
+			fyne.Do(func() {
+				progressDialog.Hide()
+				statsLabel.SetText(statsText)
+			})
+		}()
+	})
+
+	// Create the main content with a refresh button at the bottom
+	content := container.NewVBox(
+		widget.NewLabelWithStyle("EU-CLAMS Statistics", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		statsScroll,
+		container.NewHBox(layout.NewSpacer(), refreshButton),
+	)
+
+	return content
+}
+
+// Close properly cleans up resources before closing the application
+func (g *MainGUI) Close() {
+	// Stop the monitoring if active
+	if g.isMonitoring && g.dataService != nil {
+		g.stopMonitoring()
+	}
+
+	// Stop the web service if it's running
+	if g.webService != nil {
+		g.log.Info("Stopping web service...")
+		if err := g.webService.Stop(); err != nil {
+			g.log.Error("Error stopping web service: %v", err)
+		}
+		g.webService = nil
+	}
+
+	g.log.Info("Application closing")
 }

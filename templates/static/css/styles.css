@@ -58,7 +58,7 @@ body.dark-mode .stat-card {
 }
 
 /* Responsive styles */
-@media (max-width: 768px) {
+@media (max-width: 1920px) {
     .container {
         flex-direction: column;
     }

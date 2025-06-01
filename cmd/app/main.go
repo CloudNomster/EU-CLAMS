@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "0.1.4"
+	version = "0.1.5"
 )
 
 var log = logger.New()
@@ -213,9 +213,16 @@ func main() { // Define command-line flags
 
 		return // Exit after completing CLI operations
 	}
-
 	// By default, launch the GUI mode
 	log.Info("Starting in GUI mode")
+
+	// If web server was started via command line flag, don't let GUI start it again
+	if *webServer {
+		// Override the config setting to prevent GUI from starting another web server
+		cfg.EnableWebServer = false
+		log.Info("Web server already started via command line, disabling automatic start in GUI")
+	}
+
 	mainGUI := gui.NewMainGUI(log, cfg)
 	mainGUI.Show()
 }

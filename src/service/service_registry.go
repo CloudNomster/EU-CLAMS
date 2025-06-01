@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -40,4 +41,13 @@ func BroadcastToWebServices(eventType string, data interface{}) {
 	for _, service := range registry.webServices {
 		go service.BroadcastEvent(eventType, data)
 	}
+}
+
+// GetWebServiceByPort returns a registered web service by its port number
+func GetWebServiceByPort(port int) *WebService {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+
+	serviceName := fmt.Sprintf("web_%d", port)
+	return registry.webServices[serviceName]
 }
