@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -366,7 +367,7 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 	return count, nil
 }
 
-// GetHofEntries returns all HoF entries
+// GetHofEntries returns all HoF entries, ordered by timestamp (newest first)
 func (db *EntropyDB) GetHofEntries() []GlobalEntry {
 	var hofs []GlobalEntry
 	for _, entry := range db.Globals {
@@ -374,6 +375,12 @@ func (db *EntropyDB) GetHofEntries() []GlobalEntry {
 			hofs = append(hofs, entry)
 		}
 	}
+
+	// Sort by timestamp in descending order (newest first)
+	sort.Slice(hofs, func(i, j int) bool {
+		return hofs[i].Timestamp.After(hofs[j].Timestamp)
+	})
+
 	return hofs
 }
 

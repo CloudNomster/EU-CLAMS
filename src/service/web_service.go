@@ -163,9 +163,22 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	// Generate stats
 	statsData := s.db.GetStatsData()
-	globals := s.db.GetPlayerGlobals()
-	hofs := s.db.GetPlayerHofs()
+	allGlobals := s.db.GetPlayerGlobals()
+	allHofs := s.db.GetPlayerHofs()
 
+	// Limit to 10 entries
+	var globals, hofs []storage.GlobalEntry
+	if len(allGlobals) > 10 {
+		globals = allGlobals[:10]
+	} else {
+		globals = allGlobals
+	}
+
+	if len(allHofs) > 10 {
+		hofs = allHofs[:10]
+	} else {
+		hofs = allHofs
+	}
 	// Prepare template data
 	data := map[string]interface{}{
 		"PlayerName": s.playerName,
@@ -173,7 +186,7 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Stats":      statsData,
 		"Globals":    globals,
 		"Hofs":       hofs,
-		"Generated":  time.Now().Format("2006-01-02 15:04:05"),
+		"Generated":  time.Now().UTC().Format(time.RFC3339),
 	}
 
 	// Render the template
@@ -193,7 +206,7 @@ func (s *WebService) handleStats(w http.ResponseWriter, r *http.Request) {
 
 // handleGlobals handles the globals API endpoint
 func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
-	limit := 50
+	limit := 10 // Default to 10 to match the initial page load
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
@@ -202,14 +215,12 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 
 	globals := s.db.GetPlayerGlobals()
 	if len(globals) > limit {
-		globals = globals[len(globals)-limit:]
-	}
-
-	// Convert to JSON-friendly objects with properly formatted timestamps
+		globals = globals[:limit] // Take first 10 (already sorted newest first)
+	} // Convert to JSON-friendly objects with ISO8601 UTC timestamps
 	jsonGlobals := make([]model.GlobalEntryJSON, len(globals))
 	for i, g := range globals {
 		jsonGlobals[i] = model.GlobalEntryJSON{
-			Timestamp:  g.Timestamp.Format(time.RFC3339),
+			Timestamp:  g.Timestamp.UTC().Format(time.RFC3339),
 			Type:       g.Type,
 			PlayerName: g.PlayerName,
 			TeamName:   g.TeamName,
@@ -227,7 +238,7 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 
 // handleHofs handles the HOFs API endpoint
 func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
-	limit := 50
+	limit := 10 // Default to 10 to match the initial page load
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
@@ -236,14 +247,12 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 
 	hofs := s.db.GetPlayerHofs()
 	if len(hofs) > limit {
-		hofs = hofs[len(hofs)-limit:]
-	}
-
-	// Convert to JSON-friendly objects with properly formatted timestamps
+		hofs = hofs[:limit] // Take first 10 (already sorted newest first)
+	} // Convert to JSON-friendly objects with ISO8601 UTC timestamps
 	jsonHofs := make([]model.GlobalEntryJSON, len(hofs))
 	for i, h := range hofs {
 		jsonHofs[i] = model.GlobalEntryJSON{
-			Timestamp:  h.Timestamp.Format(time.RFC3339),
+			Timestamp:  h.Timestamp.UTC().Format(time.RFC3339),
 			Type:       h.Type,
 			PlayerName: h.PlayerName,
 			TeamName:   h.TeamName,
@@ -294,9 +303,9 @@ func (s *WebService) BroadcastEvent(eventType string, data interface{}) {
 	// Format timestamps for global and hof events
 	if eventType == "new_global" || eventType == "new_hof" {
 		if entry, ok := data.(*storage.GlobalEntry); ok {
-			// Convert to JSON-friendly object with properly formatted timestamp
+			// Convert to JSON-friendly object with ISO8601 UTC timestamp
 			jsonEntry := model.GlobalEntryJSON{
-				Timestamp:  entry.Timestamp.Format(time.RFC3339),
+				Timestamp:  entry.Timestamp.UTC().Format(time.RFC3339),
 				Type:       entry.Type,
 				PlayerName: entry.PlayerName,
 				TeamName:   entry.TeamName,
@@ -313,7 +322,7 @@ func (s *WebService) BroadcastEvent(eventType string, data interface{}) {
 	event := map[string]interface{}{
 		"type": eventType,
 		"data": data,
-		"time": time.Now().Format(time.RFC3339),
+		"time": time.Now().UTC().Format(time.RFC3339),
 	}
 
 	payload, err := json.Marshal(event)
