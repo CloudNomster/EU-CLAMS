@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -96,32 +97,46 @@ func (db *EntropyDB) MergeDatabase(other *EntropyDB) int {
 	return added
 }
 
-// GetPlayerGlobals returns all globals for the specified player
+// GetPlayerGlobals returns all globals for the specified player, ordered by timestamp (newest first)
 func (db *EntropyDB) GetPlayerGlobals() []GlobalEntry {
-	if db.PlayerName == "" {
-		return db.Globals
-	}
-
 	var results []GlobalEntry
-	for _, entry := range db.Globals {
-		if strings.EqualFold(entry.PlayerName, db.PlayerName) {
-			results = append(results, entry)
+
+	if db.PlayerName == "" {
+		results = append(results, db.Globals...)
+	} else {
+		for _, entry := range db.Globals {
+			if strings.EqualFold(entry.PlayerName, db.PlayerName) {
+				results = append(results, entry)
+			}
 		}
 	}
+
+	// Sort by timestamp in descending order (newest first)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Timestamp.After(results[j].Timestamp)
+	})
+
 	return results
 }
 
-// GetPlayerHofs returns all Hall of Fame entries for the specified player
+// GetPlayerHofs returns all Hall of Fame entries for the specified player, ordered by timestamp (newest first)
 func (db *EntropyDB) GetPlayerHofs() []GlobalEntry {
-	if db.PlayerName == "" {
-		return db.GetHofEntries()
-	}
-
 	var results []GlobalEntry
-	for _, entry := range db.Globals {
-		if entry.IsHof && strings.EqualFold(entry.PlayerName, db.PlayerName) {
-			results = append(results, entry)
+
+	if db.PlayerName == "" {
+		results = append(results, db.GetHofEntries()...)
+	} else {
+		for _, entry := range db.Globals {
+			if entry.IsHof && strings.EqualFold(entry.PlayerName, db.PlayerName) {
+				results = append(results, entry)
+			}
 		}
 	}
+
+	// Sort by timestamp in descending order (newest first)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Timestamp.After(results[j].Timestamp)
+	})
+
 	return results
 }

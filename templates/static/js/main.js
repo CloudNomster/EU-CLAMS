@@ -55,9 +55,8 @@ function refreshData() {
             updateHofs(hofs);
         })
         .catch(error => console.error('Error fetching HOFs:', error));
-    
-    // Update last updated time
-    document.getElementById('last-updated').textContent = formatDate(new Date().toISOString());
+      // Update last updated time with browser-localized format
+    document.getElementById('last-updated').textContent = new Date().toLocaleString();
 }
 
 // Function to update stats display
@@ -108,15 +107,16 @@ function updateGlobals(globals) {
         cell.className = "no-data";
         return;
     }
-    
-    for (const global of globalsArray) {
+      for (const global of globalsArray) {
         const row = table.insertRow();
         const timeCell = row.insertCell(0);
         const typeCell = row.insertCell(1);
         const targetCell = row.insertCell(2);
         const valueCell = row.insertCell(3);
         
-        timeCell.textContent = formatDate(global.timestamp);
+        // Format the timestamp as a localized date using the browser
+        const date = new Date(global.timestamp);
+        timeCell.textContent = date.toLocaleString();
         typeCell.textContent = global.type;
         targetCell.textContent = global.target;
         valueCell.textContent = global.value;
@@ -141,34 +141,17 @@ function updateHofs(hofs) {
         cell.className = "no-data";
         return;
     }
-    
-    for (const hof of hofsArray) {
+      for (const hof of hofsArray) {
         const row = table.insertRow();
         const timeCell = row.insertCell(0);
         const typeCell = row.insertCell(1);
         const targetCell = row.insertCell(2);
         const valueCell = row.insertCell(3);
         
-        timeCell.textContent = formatDate(hof.timestamp);
+        // Format the timestamp as a localized date using the browser
+        const date = new Date(hof.timestamp);
+        timeCell.textContent = date.toLocaleString();
         typeCell.textContent = hof.type;
         targetCell.textContent = hof.target;
-        valueCell.textContent = hof.value;
-    }
-}
-
-// Helper function to format date
-function formatDate(dateString) {
-    // Check if the date is a ISO string or timestamp object
-    if (dateString && typeof dateString === 'object' && dateString.hasOwnProperty('seconds')) {
-        // Handle timestamp object
-        return new Date(dateString.seconds * 1000).toLocaleString();
-    } else if (dateString) {
-        // Handle ISO string or any other supported format
-        const date = new Date(dateString);
-        if (date instanceof Date && !isNaN(date)) {
-            return date.toLocaleString();
-        }
-    }
-    // Return a fallback if the date is invalid
-    return new Date().toLocaleString();
+        valueCell.textContent = hof.value;    }
 }

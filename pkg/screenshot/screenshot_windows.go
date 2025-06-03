@@ -132,14 +132,19 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 
 	// Get window rectangle
 	var rect RECT
-	ret, _, _ := procGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rect)))
+	ret, _, err := procGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rect)))
 	if ret == 0 {
-		return nil, fmt.Errorf("failed to get window rectangle")
+		return nil, fmt.Errorf("failed to get window rectangle: %v", err)
 	}
 
 	// Calculate width and height
 	width := int(rect.Right - rect.Left)
 	height := int(rect.Bottom - rect.Top)
+
+	// Sanity check dimensions
+	if width <= 0 || height <= 0 || width > 8192 || height > 8192 {
+		return nil, fmt.Errorf("invalid window dimensions: %dx%d", width, height)
+	}
 
 	// Get window DC
 	hdc, _, _ := procGetDC.Call(uintptr(hwnd))
@@ -165,21 +170,30 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	// Select bitmap into DC
 	prevObj, _, _ := procSelectObject.Call(hdcMem, hBitmap)
 	defer procSelectObject.Call(hdcMem, prevObj)
-	// Use PrintWindow instead of BitBlt to capture DirectX/OpenGL content
+
+	// Try PrintWindow first with full content rendering
 	ret, _, _ = procPrintWindow.Call(
 		uintptr(hwnd),
 		hdcMem,
-		PW_RENDERFULLCONTENT) // This flag enables capturing DirectX content
+		PW_RENDERFULLCONTENT)
+
+	// If it fails, try regular PrintWindow
 	if ret == 0 {
-		// If PrintWindow fails, fall back to BitBlt as a backup method
-		ret, _, _ = procBitBlt.Call(
-			hdcMem, 0, 0, uintptr(width), uintptr(height),
-			hdc, 0, 0, SRCCOPY)
+		ret, _, _ = procPrintWindow.Call(
+			uintptr(hwnd),
+			hdcMem,
+			0)
+
+		// If that also fails, try BitBlt as a last resort
 		if ret == 0 {
-			return nil, fmt.Errorf("both PrintWindow and BitBlt failed to capture window")
+			ret, _, _ = procBitBlt.Call(
+				hdcMem, 0, 0, uintptr(width), uintptr(height),
+				hdc, 0, 0, SRCCOPY)
+			if ret == 0 {
+				return nil, fmt.Errorf("all screen capture methods failed")
+			}
 		}
 	}
-
 	// Create Go image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
@@ -191,16 +205,39 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	bmi.BmiHeader.BiPlanes = 1
 	bmi.BmiHeader.BiBitCount = 32
 	bmi.BmiHeader.BiCompression = BI_RGB
+	bmi.BmiHeader.BiSizeImage = uint32(len(img.Pix)) // Set explicit size
 
-	// Get the bits from the bitmap into our Go image
+	// Try alternative methods if the first GetDIBits call fails
 	ret, _, _ = procGetDIBits.Call(
 		hdcMem, hBitmap,
 		0, uintptr(height),
 		uintptr(unsafe.Pointer(&img.Pix[0])),
 		uintptr(unsafe.Pointer(&bmi)),
 		DIB_RGB_COLORS)
+
 	if ret == 0 {
-		return nil, fmt.Errorf("failed to get DIB bits")
+		// Try a different approach with separate buffer allocation
+		bufferSize := width * height * 4
+		buffer := make([]byte, bufferSize)
+
+		ret, _, lastErr := procGetDIBits.Call(
+			hdcMem, hBitmap,
+			0, uintptr(height),
+			uintptr(unsafe.Pointer(&buffer[0])),
+			uintptr(unsafe.Pointer(&bmi)),
+			DIB_RGB_COLORS)
+
+		if ret == 0 {
+			return nil, fmt.Errorf("failed to get DIB bits: %v", lastErr)
+		}
+
+		// Copy from buffer to image
+		copy(img.Pix, buffer)
+	}
+
+	// Fix color channel order: Windows GDI returns BGR but Go expects RGB
+	for i := 0; i < len(img.Pix); i += 4 {
+		img.Pix[i], img.Pix[i+2] = img.Pix[i+2], img.Pix[i] // Swap R and B channels
 	}
 
 	return img, nil

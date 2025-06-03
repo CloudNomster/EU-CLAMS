@@ -104,7 +104,14 @@
             | Team: <strong>{{ .TeamName }}</strong>
             {{ end }}
         </p>
-        <p>Last updated: <span id="last-updated">{{ .Generated }}</span></p>
+        <p>Last updated: <span id="last-updated"></span></p>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const timestamp = "{{ .Generated }}";
+                const date = new Date(timestamp);
+                document.getElementById('last-updated').textContent = date.toLocaleString();
+            });
+        </script>
     </header>
 
     <div class="container">
@@ -165,9 +172,8 @@
                 </tbody>
             </table>
         </div>
-
         <div class="card">
-            <h2>Latest Globals</h2>
+            <h2>Latest Globals (10)</h2>
             <table>
                 <thead>
                     <tr>
@@ -176,11 +182,9 @@
                         <th>Target</th>
                         <th>Value (PED)</th>
                     </tr>
-                </thead>
-                <tbody id="latest-globals">
-                    {{ range .Globals }}
+                </thead>                <tbody id="latest-globals">                    {{ range .Globals }}
                     <tr>
-                        <td>{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
+                        <td class="timestamp" data-time="{{ .Timestamp.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
                         <td>{{ .Type }}</td>
                         <td>{{ .Target }}</td>
                         <td>{{ .Value }}</td>
@@ -188,10 +192,8 @@
                     {{ end }}
                 </tbody>
             </table>
-        </div>
-
-        <div class="card">
-            <h2>Hall of Fame Entries</h2>
+        </div>        <div class="card">
+            <h2>Hall of Fame Entries (10)</h2>
             <table>
                 <thead>
                     <tr>
@@ -200,11 +202,9 @@
                         <th>Target</th>
                         <th>Value (PED)</th>
                     </tr>
-                </thead>
-                <tbody id="latest-hofs">
-                    {{ range .Hofs }}
+                </thead>                <tbody id="latest-hofs">                    {{ range .Hofs }}
                     <tr>
-                        <td>{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
+                        <td class="timestamp" data-time="{{ .Timestamp.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
                         <td>{{ .Type }}</td>
                         <td>{{ .Target }}</td>
                         <td>{{ .Value }}</td>
@@ -232,9 +232,9 @@
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
             console.log('WebSocket message received:', data);
-            
-            // Update last updated time
-            document.getElementById('last-updated').textContent = data.time;
+              // Update last updated time with browser-localized format
+            const updateTime = new Date(data.time);
+            document.getElementById('last-updated').textContent = updateTime.toLocaleString();
             
             // Handle different event types
             if (data.type === 'new_global') {
@@ -256,18 +256,17 @@
                 location.reload();
             }, 5000);
         };
-        
-        // Function to handle new global entry
+          // Function to handle new global entry
         function handleNewGlobal(global) {
             const table = document.getElementById('latest-globals');
             const row = table.insertRow(0);
-            
-            const timeCell = row.insertCell(0);
+              const timeCell = row.insertCell(0);
             const typeCell = row.insertCell(1);
             const targetCell = row.insertCell(2);
             const valueCell = row.insertCell(3);
-            
-            timeCell.textContent = formatDate(global.timestamp);
+              // Format the timestamp using the browser's locale
+            const date = new Date(global.timestamp);
+            timeCell.textContent = date.toLocaleString();
             typeCell.textContent = global.type;
             targetCell.textContent = global.target;
             valueCell.textContent = global.value;
@@ -277,20 +276,24 @@
             setTimeout(() => {
                 row.style.backgroundColor = '';
             }, 5000);
+            
+            // Remove excess rows to keep only 10
+            if (table.rows.length > 10) {
+                table.deleteRow(10);
+            }
         }
-        
-        // Function to handle new HoF entry
+          // Function to handle new HoF entry
         function handleNewHof(hof) {
             // Add to HoF table
             const table = document.getElementById('latest-hofs');
             const row = table.insertRow(0);
-            
-            const timeCell = row.insertCell(0);
+              const timeCell = row.insertCell(0);
             const typeCell = row.insertCell(1);
             const targetCell = row.insertCell(2);
             const valueCell = row.insertCell(3);
-            
-            timeCell.textContent = formatDate(hof.timestamp);
+              // Format the timestamp using the browser's locale
+            const date = new Date(hof.timestamp);
+            timeCell.textContent = date.toLocaleString();
             typeCell.textContent = hof.type;
             targetCell.textContent = hof.target;
             valueCell.textContent = hof.value;
@@ -300,6 +303,11 @@
             setTimeout(() => {
                 row.style.backgroundColor = '';
             }, 5000);
+            
+            // Remove excess rows to keep only 10
+            if (table.rows.length > 10) {
+                table.deleteRow(10);
+            }
         }
         
         // Function to update statistics
@@ -343,22 +351,17 @@
             }, 5000);
         }
         
-        // Helper function to format date
-        function formatDate(dateString) {
-            // Check if the date is a ISO string or timestamp object
-            if (dateString && typeof dateString === 'object' && dateString.hasOwnProperty('seconds')) {
-                // Handle timestamp object
-                return new Date(dateString.seconds * 1000).toLocaleString();
-            } else if (dateString) {
-                // Handle ISO string or any other supported format
-                const date = new Date(dateString);
-                if (date instanceof Date && !isNaN(date)) {
-                    return date.toLocaleString();
+        // Initialize all timestamps on page load to use browser localization
+        document.addEventListener('DOMContentLoaded', function() {
+            // Convert all timestamp cells to localized format
+            document.querySelectorAll('.timestamp').forEach(function(cell) {
+                const isoTime = cell.getAttribute('data-time');
+                if (isoTime) {
+                    const date = new Date(isoTime);
+                    cell.textContent = date.toLocaleString();
                 }
-            }
-            // Return a fallback if the date is invalid
-            return new Date().toLocaleString();
-        }
+            });
+        });
     </script>
 </body>
 </html>
