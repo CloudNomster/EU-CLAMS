@@ -194,7 +194,6 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			}
 		}
 	}
-
 	// Create Go image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
@@ -209,7 +208,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	bmi.BmiHeader.BiSizeImage = uint32(len(img.Pix)) // Set explicit size
 
 	// Try alternative methods if the first GetDIBits call fails
-	ret, _, err = procGetDIBits.Call(
+	ret, _, _ = procGetDIBits.Call(
 		hdcMem, hBitmap,
 		0, uintptr(height),
 		uintptr(unsafe.Pointer(&img.Pix[0])),
@@ -221,7 +220,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 		bufferSize := width * height * 4
 		buffer := make([]byte, bufferSize)
 
-		ret, _, err = procGetDIBits.Call(
+		ret, _, lastErr := procGetDIBits.Call(
 			hdcMem, hBitmap,
 			0, uintptr(height),
 			uintptr(unsafe.Pointer(&buffer[0])),
@@ -229,7 +228,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			DIB_RGB_COLORS)
 
 		if ret == 0 {
-			return nil, fmt.Errorf("failed to get DIB bits: %v", err)
+			return nil, fmt.Errorf("failed to get DIB bits: %v", lastErr)
 		}
 
 		// Copy from buffer to image
