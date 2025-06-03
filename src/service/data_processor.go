@@ -13,29 +13,31 @@ import (
 // DataProcessorService processes chat logs and extracts globals data
 type DataProcessorService struct {
 	*BaseService
-	log          *logger.Logger
-	config       config.Config
-	db           *storage.EntropyDB
-	chatLogPath  string
-	progressChan chan float64
-	stopChan     chan struct{}
-	watchDelay   time.Duration
-	lastGlobal   time.Time
-	isImportMode bool // Flag to indicate import-only mode, no screenshots
+	log            *logger.Logger
+	config         config.Config
+	db             *storage.EntropyDB
+	chatLogPath    string
+	progressChan   chan float64
+	stopChan       chan struct{}
+	watchDelay     time.Duration
+	lastGlobal     time.Time
+	isImportMode   bool // Flag to indicate import-only mode, no screenshots
+	initialProcess bool // Flag to indicate if this is the initial processing of the chat log
 }
 
 // NewDataProcessorService creates a new DataProcessorService instance
 func NewDataProcessorService(log *logger.Logger, cfg config.Config, chatLogPath string) *DataProcessorService {
 	return &DataProcessorService{
-		BaseService:  NewBaseService("DataProcessor"),
-		log:          log,
-		config:       cfg,
-		chatLogPath:  chatLogPath,
-		progressChan: make(chan float64, 1),
-		stopChan:     make(chan struct{}),
-		watchDelay:   time.Second * 1, // Check for changes every second
-		lastGlobal:   time.Time{},
-		isImportMode: false, // Default to monitoring mode which takes screenshots
+		BaseService:    NewBaseService("DataProcessor"),
+		log:            log,
+		config:         cfg,
+		chatLogPath:    chatLogPath,
+		progressChan:   make(chan float64, 1),
+		stopChan:       make(chan struct{}),
+		watchDelay:     time.Second * 1, // Check for changes every second
+		lastGlobal:     time.Time{},
+		isImportMode:   false, // Default to monitoring mode which takes screenshots
+		initialProcess: true,  // Mark as initial processing to avoid screenshots for historical globals
 	}
 }
 
@@ -88,7 +90,11 @@ func (s *DataProcessorService) Run() error {
 		return fmt.Errorf("chat log path is required")
 	}
 
-	// Make sure we're not in import mode when running regular monitoring
+	// We start with initialProcess set to true to avoid screenshots for
+	// historical globals during startup
+	s.initialProcess = true
+
+	// Reset import mode, in case it was set during a previous operation
 	s.isImportMode = false
 
 	// Initial processing of the log file
@@ -96,7 +102,10 @@ func (s *DataProcessorService) Run() error {
 		return err
 	}
 
-	// Start watching for changes
+	// Reset initialProcess flag after the first processing is complete
+	s.initialProcess = false
+
+	// Start watching for changes - this will now take screenshots for new globals
 	go s.watchLogFile()
 
 	// Wait for stop signal
@@ -139,16 +148,23 @@ func (s *DataProcessorService) processLogFile() error {
 	}
 
 	// Store the current globals count before processing
-	oldGlobalsCount := len(s.db.Globals)
-
-	// If we haven't processed this file before, process it from the beginning
+	oldGlobalsCount := len(s.db.Globals) // If we haven't processed this file before, process it from the beginning
 	if s.db.LastProcessedSize == 0 {
+		// Set this flag to prevent taking screenshots for historical globals
+		s.isImportMode = true
+
 		s.log.Info("Processing entire chat log file: %s", s.chatLogPath)
 		count, err := s.db.ProcessChatLog(s.chatLogPath, s.progressChan, s.log)
 		if err != nil {
 			return fmt.Errorf("failed to process chat log: %w", err)
 		}
 		s.log.Info("Processed %d global entries", count)
+
+		// After initial processing, reset the flag for future runs
+		if s.initialProcess {
+			s.initialProcess = false
+			s.isImportMode = false
+		}
 	} else if fileInfo.Size() > s.db.LastProcessedSize {
 		// Process only new content
 		s.log.Debug("Processing new entries in chat log")
@@ -161,7 +177,11 @@ func (s *DataProcessorService) processLogFile() error {
 
 			// Get the new globals that were added
 			newGlobals := s.db.Globals[oldGlobalsCount:]
-			s.HandleNewGlobals(newGlobals)
+
+			// Only handle new globals with screenshots if not in initial processing mode
+			if !s.initialProcess {
+				s.HandleNewGlobals(newGlobals)
+			}
 		}
 	}
 
@@ -179,6 +199,10 @@ func (s *DataProcessorService) watchLogFile() {
 	defer ticker.Stop()
 
 	s.log.Info("Started watching chat log for changes: %s", s.chatLogPath)
+
+	// Ensure we're not in initial processing mode when watching for changes
+	s.initialProcess = false
+	s.isImportMode = false
 
 	for {
 		select {
@@ -208,8 +232,9 @@ func (s *DataProcessorService) GetDatabase() *storage.EntropyDB {
 // ProcessLogOnly processes the log file once without starting monitoring
 func (s *DataProcessorService) ProcessLogOnly() error {
 	s.log.Info("Processing log file once: %s", s.chatLogPath)
-	// Set import mode flag to disable screenshots
+	// Set both flags to disable screenshots
 	s.isImportMode = true
+	s.initialProcess = true
 
 	// Process the log file
 	if err := s.processLogFile(); err != nil {
