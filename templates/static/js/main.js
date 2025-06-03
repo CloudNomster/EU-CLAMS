@@ -153,25 +153,5 @@ function updateHofs(hofs) {
         timeCell.textContent = date.toLocaleString();
         typeCell.textContent = hof.type;
         targetCell.textContent = hof.target;
-        valueCell.textContent = hof.value;
-    }
-}
-
-// Helper function to format date
-function formatDate(dateString) {
-    // Check if the date is a timestamp object with seconds
-    if (dateString && typeof dateString === 'object' && dateString.hasOwnProperty('seconds')) {
-        return new Date(dateString.seconds * 1000).toLocaleString();
-    } 
-    
-    // Handle any valid date string format
-    if (dateString) {
-        const date = new Date(dateString);
-        if (date instanceof Date && !isNaN(date)) {
-            return date.toLocaleString();
-        }
-    }
-    
-    // Return current time as fallback
-    return new Date().toLocaleString();
+        valueCell.textContent = hof.value;    }
 }

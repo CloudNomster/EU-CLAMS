@@ -349,22 +349,6 @@
                 notification.classList.remove('show');
             }, 5000);
         }
-          // Helper function to format date
-        function formatDate(dateString) {
-            // Check if the date is a ISO string or timestamp object
-            if (dateString && typeof dateString === 'object' && dateString.hasOwnProperty('seconds')) {
-                // Handle timestamp object
-                return new Date(dateString.seconds * 1000).toLocaleString();
-            } else if (dateString) {
-                // Handle ISO string or any other supported format
-                const date = new Date(dateString);
-                if (date instanceof Date && !isNaN(date)) {
-                    return date.toLocaleString();
-                }
-            }
-            // Return a fallback if the date is invalid
-            return new Date().toLocaleString();
-        }
         
         // Initialize all timestamps on page load to use browser localization
         document.addEventListener('DOMContentLoaded', function() {
