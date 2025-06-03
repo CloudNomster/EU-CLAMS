@@ -34,7 +34,7 @@ func NewDataProcessorService(log *logger.Logger, cfg config.Config, chatLogPath 
 		chatLogPath:    chatLogPath,
 		progressChan:   make(chan float64, 1),
 		stopChan:       make(chan struct{}),
-		watchDelay:     time.Second * 1, // Check for changes every second
+		watchDelay:     200 * time.Millisecond, // Check for changes every 0.2 seconds
 		lastGlobal:     time.Time{},
 		isImportMode:   false, // Default to monitoring mode which takes screenshots
 		initialProcess: true,  // Mark as initial processing to avoid screenshots for historical globals
