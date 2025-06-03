@@ -29,6 +29,7 @@ type ConfigGUI struct {
 	chatLogPathEntry       *widget.Entry
 	enableScreenshotsCheck *widget.Check
 	screenshotDirEntry     *widget.Entry
+	screenshotDelayEntry   *widget.Entry
 	gameWindowTitleEntry   *widget.Entry
 	enableWebServerCheck   *widget.Check
 	webServerPortEntry     *widget.Entry
@@ -90,6 +91,9 @@ func (g *ConfigGUI) createUI() {
 	g.screenshotDirEntry = widget.NewEntry()
 	g.screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
 	g.screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
+	g.screenshotDelayEntry = widget.NewEntry()
+	g.screenshotDelayEntry.SetText(fmt.Sprintf("%.1f", g.config.ScreenshotDelay))
+	g.screenshotDelayEntry.SetPlaceHolder("0.6")
 	g.gameWindowTitleEntry = widget.NewEntry()
 	g.gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
 	g.gameWindowTitleEntry.SetPlaceHolder("Entropia Universe Client")
@@ -131,8 +135,7 @@ func (g *ConfigGUI) createUI() {
 	// Create database path container with browse button
 	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, g.dbPathEntry)
 	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, g.chatLogPathEntry)
-	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, g.screenshotDirEntry)
-	// Create form
+	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, g.screenshotDirEntry) // Create form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
 			{Text: "Player Name", Widget: g.playerNameEntry, HintText: "Your character name in Entropia Universe"},
@@ -141,6 +144,7 @@ func (g *ConfigGUI) createUI() {
 			{Text: "Chat Log Path", Widget: chatLogPathContainer, HintText: "Path to Entropia Universe chat.log"},
 			{Text: "Enable Screenshots", Widget: g.enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
 			{Text: "Screenshot Directory", Widget: screenshotDirContainer, HintText: "Where to save screenshots"},
+			{Text: "Screenshot Delay", Widget: g.screenshotDelayEntry, HintText: "Delay in seconds before taking a screenshot (default: 0.6)"},
 			{Text: "Game Window Title", Widget: g.gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
 			{Text: "Enable Web Server", Widget: g.enableWebServerCheck, HintText: "Start a web server to view statistics"},
 			{Text: "Web Server Port", Widget: g.webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
@@ -171,6 +175,16 @@ func (g *ConfigGUI) saveConfig() { // Update configuration values from form fiel
 	g.config.ScreenshotDirectory = g.screenshotDirEntry.Text
 	g.config.GameWindowTitle = g.gameWindowTitleEntry.Text
 	g.config.EnableWebServer = g.enableWebServerCheck.Checked
+
+	// Convert screenshot delay from string to float64
+	screenshotDelay := 0.6 // Default delay
+	if delay, err := strconv.ParseFloat(g.screenshotDelayEntry.Text, 64); err == nil && delay >= 0 {
+		screenshotDelay = delay
+	} else if g.screenshotDelayEntry.Text != "" {
+		dialog.ShowError(fmt.Errorf("invalid screenshot delay: must be a positive number"), g.mainWindow)
+		return
+	}
+	g.config.ScreenshotDelay = screenshotDelay
 
 	// Convert web server port from string to int
 	webServerPort := 8080 // Default port

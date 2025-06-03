@@ -17,11 +17,12 @@ type ScreenshotManager struct {
 	gameWindowTitle string
 	enabled         bool
 	lastScreenshot  time.Time
-	platformSupport bool // Whether the current platform supports screenshots
+	platformSupport bool          // Whether the current platform supports screenshots
+	captureDelay    time.Duration // Delay before taking screenshot to allow UI to update
 }
 
 // NewScreenshotManager creates a new screenshot manager
-func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool) *ScreenshotManager {
+func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool, delaySeconds float64) *ScreenshotManager {
 	// Check if we're on Windows, which is the only platform with screenshot support
 	platformSupport := runtime.GOOS == "windows"
 
@@ -31,6 +32,7 @@ func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool) *
 		enabled:         enabled && platformSupport, // Only enable if platform supports it
 		lastScreenshot:  time.Time{},
 		platformSupport: platformSupport,
+		captureDelay:    time.Duration(delaySeconds * float64(time.Second)),
 	}
 }
 

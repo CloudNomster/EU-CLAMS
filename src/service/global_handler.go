@@ -34,7 +34,6 @@ func (s *DataProcessorService) HandleNewGlobals(newEntries []storage.GlobalEntry
 				screenshotDir = filepath.Join(exeDir, screenshotDir)
 			}
 		}
-
 		// Create screenshot directory if it doesn't exist
 		if err := os.MkdirAll(screenshotDir, 0755); err != nil {
 			s.log.Error("Failed to create screenshot directory: %v", err)
@@ -43,6 +42,7 @@ func (s *DataProcessorService) HandleNewGlobals(newEntries []storage.GlobalEntry
 				screenshotDir,
 				s.config.GameWindowTitle,
 				s.config.EnableScreenshots,
+				s.config.ScreenshotDelay,
 			)
 		}
 	}
@@ -57,8 +57,8 @@ func (s *DataProcessorService) HandleNewGlobals(newEntries []storage.GlobalEntry
 		// Only take screenshots for player's/team's globals or any HOFs
 		if screenshotMgr != nil && (entry.IsHof || isRelevantToPlayer || isRelevantToTeam) {
 			go func(e storage.GlobalEntry) {
-				// Wait a short time to allow the UI to update before taking the screenshot
-				time.Sleep(500 * time.Millisecond)
+				// Wait for the configured amount of time to allow the UI to update before taking the screenshot
+				time.Sleep(screenshotMgr.captureDelay)
 
 				screenshotPath, err := screenshotMgr.TakeScreenshotForGlobal(&e)
 				if err != nil {

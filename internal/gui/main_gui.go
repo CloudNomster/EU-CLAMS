@@ -455,10 +455,13 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 	// Create screenshot related fields
 	enableScreenshotsCheck := widget.NewCheck("", nil)
 	enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
-
 	screenshotDirEntry := widget.NewEntry()
 	screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
 	screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
+
+	screenshotDelayEntry := widget.NewEntry()
+	screenshotDelayEntry.SetText(fmt.Sprintf("%.1f", g.config.ScreenshotDelay))
+	screenshotDelayEntry.SetPlaceHolder("0.6")
 
 	gameWindowTitleEntry := widget.NewEntry()
 	gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
@@ -499,7 +502,6 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			screenshotDirEntry.SetText(uri.Path())
 		}, g.mainWindow)
 	})
-
 	// Create containers with browse buttons
 	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, dbPathEntry)
 	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, chatLogPathEntry)
@@ -514,9 +516,9 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			{Text: "Chat Log Path", Widget: chatLogPathContainer, HintText: "Path to Entropia Universe chat.log"},
 			{Text: "Enable Screenshots", Widget: enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
 			{Text: "Screenshot Directory", Widget: screenshotDirContainer, HintText: "Where to save screenshots"},
+			{Text: "Screenshot Delay", Widget: screenshotDelayEntry, HintText: "Delay in seconds before taking a screenshot (default: 0.6)"},
 			{Text: "Game Window Title", Widget: gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
-			{Text: "Enable Web Server", Widget: enableWebServerCheck, HintText: "Start a web server to view statistics"},
-			{Text: "Web Server Port", Widget: webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
+			{Text: "Enable Web Server", Widget: enableWebServerCheck, HintText: "Start a web server to view statistics"}, {Text: "Web Server Port", Widget: webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
 		},
 		OnSubmit: func() {
 			// Update configuration values from form fields
@@ -527,6 +529,16 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			g.config.ScreenshotDirectory = screenshotDirEntry.Text
 			g.config.GameWindowTitle = gameWindowTitleEntry.Text
 			g.config.EnableWebServer = enableWebServerCheck.Checked
+
+			// Convert screenshot delay from string to float64
+			screenshotDelay := 0.6 // Default delay
+			if delay, err := strconv.ParseFloat(screenshotDelayEntry.Text, 64); err == nil && delay >= 0 {
+				screenshotDelay = delay
+			} else if screenshotDelayEntry.Text != "" {
+				dialog.ShowError(fmt.Errorf("invalid screenshot delay: must be a positive number"), g.mainWindow)
+				return
+			}
+			g.config.ScreenshotDelay = screenshotDelay
 
 			// Convert web server port from string to int
 			webServerPort := 8080 // Default port

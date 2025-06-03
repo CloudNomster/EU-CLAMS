@@ -5,6 +5,7 @@ player_name: YourCharacterName
 team_name: YourTeamName
 enable_screenshots: true
 screenshot_directory: ./data/screenshots
+screenshot_delay: 0.6
 game_window_title: Entropia Universe Client
 enable_web_server: false
 web_server_port: 8080
