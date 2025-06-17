@@ -245,7 +245,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			DIB_RGB_COLORS)
 
 		if ret == 0 {
-			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes, buffer size=%d)", lastErr, width, height, requiredBufferSize, len(buffer))
+			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes, buffer size=%d, image size=%d)", lastErr, width, height, requiredBufferSize, len(buffer), len(img.Pix))
 		}
 
 		// Copy from buffer to image
