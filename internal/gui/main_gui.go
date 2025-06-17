@@ -250,33 +250,17 @@ func (g *MainGUI) importChatLog() {
 			dialog.ShowError(fmt.Errorf("failed to initialize data processor: %w", err), g.mainWindow)
 			return
 		}
-
-		// Show progress dialog using the recommended approach
-		progressContent := container.NewVBox(
-			widget.NewLabel("Processing chat log..."),
-			widget.NewProgressBar(),
+		// Show simple message that import is in progress
+		importDialog := dialog.NewCustomWithoutButtons(
+			"Importing",
+			container.NewVBox(widget.NewLabel("Processing chat log... Please wait.")),
+			g.mainWindow,
 		)
-		progress := dialog.NewCustomWithoutButtons("Importing", progressContent, g.mainWindow)
-		progress.Show()
-
-		// Get the progress bar widget to update later
-		progressBar := progressContent.Objects[1].(*widget.ProgressBar)
-
-		// Process chat log asynchronously
+		importDialog.Show() // Process chat log asynchronously
 		go func() {
-			// Set up progress monitoring
-			progressChan := make(chan float64, 10)
-			go func() {
-				for p := range progressChan {
-					// Thread-safe UI update
-					fyne.Do(func() {
-						progressBar.SetValue(p / 100.0)
-					})
-				}
-			}()
-
 			// Run service - one-time import, don't start monitoring
-			dataService.SetProgressChannel(progressChan)
+			// Set progress channel to nil to disable progress updates
+			dataService.SetProgressChannel(nil)
 			if err := dataService.ProcessLogOnly(); err != nil {
 				g.log.Error("Import error: %v", err)
 				// Use a channel to communicate back to the main thread
@@ -285,7 +269,7 @@ func (g *MainGUI) importChatLog() {
 				go func() {
 					err := <-errorChan
 					fyne.Do(func() {
-						progress.Hide()
+						importDialog.Hide()
 						dialog.ShowError(err, g.mainWindow)
 					})
 				}()
@@ -298,7 +282,7 @@ func (g *MainGUI) importChatLog() {
 			go func() {
 				<-doneChan
 				fyne.Do(func() {
-					progress.Hide()
+					importDialog.Hide()
 					dialog.ShowInformation("Success", "Chat log imported successfully", g.mainWindow)
 					g.statusLabel.SetText("Import completed")
 				})
