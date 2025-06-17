@@ -22,7 +22,7 @@ func NewDefaultConfig() Config {
 		PlayerName:          "",
 		EnableScreenshots:   true,
 		ScreenshotDirectory: "./data/screenshots",
-		ScreenshotDelay:     0.6, // Default to 500ms
+		ScreenshotDelay:     0.6, // Default to 600ms
 		GameWindowTitle:     "Entropia Universe Client",
 		EnableWebServer:     false,
 		WebServerPort:       8080,
