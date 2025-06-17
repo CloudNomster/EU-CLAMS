@@ -161,7 +161,7 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate stats
+	// Generate stats - always get fresh data from the database
 	statsData := s.db.GetStatsData()
 	allGlobals := s.db.GetPlayerGlobals()
 	allHofs := s.db.GetPlayerHofs()
@@ -188,9 +188,13 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Hofs":       hofs,
 		"Generated":  time.Now().UTC().Format(time.RFC3339),
 	}
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	w.Header().Set("Content-Type", "text/html")
 
 	// Render the template
-	w.Header().Set("Content-Type", "text/html")
 	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
 		s.log.Error("Failed to render template: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -199,8 +203,15 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // handleStats handles the stats API endpoint
 func (s *WebService) handleStats(w http.ResponseWriter, r *http.Request) {
+	// Always get fresh stats from the database
 	statsData := s.db.GetStatsData()
+
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
+
 	json.NewEncoder(w).Encode(statsData)
 }
 
@@ -213,10 +224,13 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Always get fresh globals from the database
 	globals := s.db.GetPlayerGlobals()
 	if len(globals) > limit {
 		globals = globals[:limit] // Take first 10 (already sorted newest first)
-	} // Convert to JSON-friendly objects with ISO8601 UTC timestamps
+	}
+
+	// Convert to JSON-friendly objects with ISO8601 UTC timestamps
 	jsonGlobals := make([]model.GlobalEntryJSON, len(globals))
 	for i, g := range globals {
 		jsonGlobals[i] = model.GlobalEntryJSON{
@@ -232,7 +246,12 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
+
 	json.NewEncoder(w).Encode(jsonGlobals)
 }
 
@@ -245,10 +264,13 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Always get fresh HOFs from the database
 	hofs := s.db.GetPlayerHofs()
 	if len(hofs) > limit {
 		hofs = hofs[:limit] // Take first 10 (already sorted newest first)
-	} // Convert to JSON-friendly objects with ISO8601 UTC timestamps
+	}
+
+	// Convert to JSON-friendly objects with ISO8601 UTC timestamps
 	jsonHofs := make([]model.GlobalEntryJSON, len(hofs))
 	for i, h := range hofs {
 		jsonHofs[i] = model.GlobalEntryJSON{
@@ -264,7 +286,12 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
+
 	json.NewEncoder(w).Encode(jsonHofs)
 }
 
