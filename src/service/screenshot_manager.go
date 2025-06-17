@@ -73,12 +73,17 @@ func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry)
 		if err == nil {
 			absScreenshotDir = filepath.Join(exeDir, sm.screenshotDir)
 		}
-	}
-
-	// Take the screenshot
-	filePath, err := screenshot.TakeScreenshot(sm.gameWindowTitle, absScreenshotDir, prefix)
+	} // Take the screenshot and get the full window title
+	filePath, fullWindowTitle, err := screenshot.TakeScreenshot(sm.gameWindowTitle, absScreenshotDir, prefix)
 	if err == nil {
 		sm.lastScreenshot = time.Now()
+
+		// If we got a window title, try to extract location if the global entry doesn't have one
+		if fullWindowTitle != "" && entry.Location == "" {
+			if location := screenshot.ExtractLocationFromWindowTitle(fullWindowTitle); location != "" {
+				entry.Location = location
+			}
+		}
 	}
 
 	return filePath, err

@@ -31,6 +31,7 @@ type EntropyDB struct {
 	TeamName          string        `yaml:"team_name,omitempty"`
 	LastProcessed     time.Time     `yaml:"last_processed,omitempty"`
 	LastProcessedSize int64         `yaml:"last_processed_size,omitempty"`
+	dirty             bool          // Indicates if the database has unsaved changes
 }
 
 // NewEntropyDB creates a new empty database
@@ -415,4 +416,26 @@ func (db *EntropyDB) GetEntriesByValue(minValue float64) []GlobalEntry {
 		}
 	}
 	return results
+}
+
+// UpdateGlobalLocation updates the location for a specific global entry
+func (db *EntropyDB) UpdateGlobalLocation(entry *GlobalEntry) error {
+	// Find the entry in the database based on its timestamp and raw message
+	for i := range db.Globals {
+		// Match based on timestamp and raw message to ensure we find the exact entry
+		if db.Globals[i].Timestamp.Equal(entry.Timestamp) && db.Globals[i].RawMessage == entry.RawMessage {
+			// Update the location
+			db.Globals[i].Location = entry.Location
+
+			// Mark the database as dirty so it gets saved
+			db.dirty = true
+
+			// No need to continue searching
+			break
+		}
+	}
+
+	// We don't need to save the database here as that will be handled by the
+	// regular save mechanism in the data processor service
+	return nil
 }
