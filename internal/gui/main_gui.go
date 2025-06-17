@@ -4,11 +4,13 @@ import (
 	"eu-clams/internal/config"
 	"eu-clams/internal/logger"
 	"eu-clams/internal/storage"
+	"eu-clams/pkg/screenshot"
 	"eu-clams/src/service"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"fyne.io/fyne/v2"
@@ -130,12 +132,15 @@ func (g *MainGUI) createUI() {
 
 	// Create statistics tab content
 	statsContent := g.createStatsTab()
+	// Create debug tab content
+	debugContent := g.createDebugTab()
 
 	// Create tabs container
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon("Dashboard", theme.HomeIcon(), dashboardContent),
 		container.NewTabItemWithIcon("Configuration", theme.SettingsIcon(), configContent),
 		container.NewTabItemWithIcon("Statistics", theme.DocumentIcon(), statsContent),
+		container.NewTabItemWithIcon("Debug", theme.HelpIcon(), debugContent),
 	)
 
 	g.mainWindow.SetContent(tabs)
@@ -565,6 +570,104 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 	return container.NewVBox(
 		widget.NewLabelWithStyle("EU-CLAMS Configuration", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		form,
+	)
+}
+
+// createDebugTab creates the content for the debug tab
+func (g *MainGUI) createDebugTab() fyne.CanvasObject {
+	// Create status label for debug operations
+	debugStatusLabel := widget.NewLabelWithStyle("Ready", fyne.TextAlignCenter, fyne.TextStyle{})
+
+	// Create screenshot test button
+	screenshotTestButton := widget.NewButtonWithIcon("Test Screenshot", theme.MediaPhotoIcon(), func() {
+		go func() {
+			// First update the status label
+			fyne.Do(func() {
+				debugStatusLabel.SetText("Taking screenshot...")
+			})
+
+			// Create a temporary screenshot manager with current settings
+			// Use game window title from config, if available
+			gameWindowTitle := "Entropia Universe Client"
+			if g.config.GameWindowTitle != "" {
+				gameWindowTitle = g.config.GameWindowTitle
+			}
+
+			// Use screenshot directory from config, if available
+			screenshotDir := "./data/screenshots"
+			if g.config.ScreenshotDirectory != "" {
+				screenshotDir = g.config.ScreenshotDirectory
+			}
+
+			// Create absolute path for screenshot directory
+			absScreenshotDir := screenshotDir
+			if !filepath.IsAbs(absScreenshotDir) {
+				// Use executable directory as base
+				exeDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+				if err == nil {
+					absScreenshotDir = filepath.Join(exeDir, screenshotDir)
+				}
+			}
+
+			// Ensure directory exists
+			if err := os.MkdirAll(absScreenshotDir, 0755); err != nil {
+				fyne.Do(func() {
+					debugStatusLabel.SetText(fmt.Sprintf("Error: %v", err))
+					dialog.ShowError(fmt.Errorf("failed to create screenshot directory: %w", err), g.mainWindow)
+				})
+				return
+			}
+			// Take a test screenshot with a unique prefix
+			filePath, fullWindowTitle, err := screenshot.TakeScreenshot(gameWindowTitle, absScreenshotDir, "debug_test")
+
+			// Update the UI on the main thread
+			fyne.Do(func() {
+				if err != nil {
+					debugStatusLabel.SetText(fmt.Sprintf("Error: %v", err))
+					dialog.ShowError(err, g.mainWindow)
+				} else {
+					debugStatusLabel.SetText(fmt.Sprintf("Screenshot saved: %s", filepath.Base(filePath)))
+					dialog.ShowInformation("Screenshot Successful",
+						fmt.Sprintf("Screenshot saved to:\n%s\n\nWindow title: %s", filePath, fullWindowTitle),
+						g.mainWindow)
+				}
+			})
+		}()
+	})
+
+	// Create debug tools section
+	debugToolsBox := container.NewVBox(
+		widget.NewLabelWithStyle("Debug Tools", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		screenshotTestButton,
+		debugStatusLabel,
+	)
+
+	// Create debug info section
+	systemInfo := fmt.Sprintf(
+		"OS: %s\nArchitecture: %s\nScreenshot Support: %t",
+		runtime.GOOS,
+		runtime.GOARCH,
+		runtime.GOOS == "windows", // Only Windows is supported for screenshots
+	)
+
+	debugInfoBox := container.NewVBox(
+		widget.NewLabelWithStyle("System Information", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabel(systemInfo),
+	)
+
+	// Create panels for the boxes
+	debugToolsPanel := widget.NewCard("", "", debugToolsBox)
+	debugInfoPanel := widget.NewCard("", "", debugInfoBox)
+
+	// Create boxes container with grid layout
+	boxesContainer := container.New(layout.NewGridLayout(1),
+		debugToolsPanel,
+		debugInfoPanel,
+	)
+
+	// Create main content container
+	return container.NewVBox(
+		boxesContainer,
 	)
 }
 

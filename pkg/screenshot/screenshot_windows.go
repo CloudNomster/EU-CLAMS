@@ -225,38 +225,14 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	bmi.BmiHeader.BiCompression = BI_RGB
 	bmi.BmiHeader.BiSizeImage = uint32(requiredBufferSize) // Use the explicitly calculated size
 
-	// Try alternative methods if the first GetDIBits call fails
 	ret, _, err = procGetDIBits.Call(
 		hdcMem, hBitmap,
 		0, uintptr(height),
 		uintptr(unsafe.Pointer(&img.Pix[0])),
 		uintptr(unsafe.Pointer(&bmi)),
 		DIB_RGB_COLORS)
-	if err != nil {
-		log.Error("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes, image size=%d)", err.Error(), width, height, requiredBufferSize, len(img.Pix))
-	}
-
 	if ret == 0 {
-		// Try a different approach with separate buffer allocation
-		// Use the previously calculated buffer size to ensure consistency
-		buffer := make([]byte, requiredBufferSize)
-
-		ret, _, lastErr := procGetDIBits.Call(
-			hdcMem, hBitmap,
-			0, uintptr(height),
-			uintptr(unsafe.Pointer(&buffer[0])),
-			uintptr(unsafe.Pointer(&bmi)),
-			DIB_RGB_COLORS)
-
-		if ret == 0 {
-			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes, buffer size=%d, image size=%d)", lastErr, width, height, requiredBufferSize, len(buffer), len(img.Pix))
-		}
-
-		// Copy from buffer to image
-		if len(buffer) > len(img.Pix) {
-			return nil, fmt.Errorf("buffer size mismatch: buffer=%d bytes, image=%d bytes", len(buffer), len(img.Pix))
-		}
-		copy(img.Pix, buffer)
+		return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes, image size=%d)", err, width, height, requiredBufferSize, len(img.Pix))
 	}
 
 	// Fix color channel order: Windows GDI returns BGR but Go expects RGB
