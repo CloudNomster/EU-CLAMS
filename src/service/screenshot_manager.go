@@ -49,7 +49,6 @@ func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry)
 	if !sm.lastScreenshot.IsZero() && time.Since(sm.lastScreenshot) < 2*time.Second {
 		return "", fmt.Errorf("screenshot already taken recently")
 	}
-
 	// Create prefix based on global type and whether it's a HoF
 	prefix := entry.Type
 	if entry.IsHof {
@@ -57,6 +56,9 @@ func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry)
 	} else {
 		prefix = "global_" + prefix
 	}
+	// Add global value to prefix right after global_/hof_ prefix
+	prefix += fmt.Sprintf("_%.2f", entry.Value)
+	prefix += "Ped"
 
 	// Add player or team name to prefix
 	if entry.TeamName != "" {
