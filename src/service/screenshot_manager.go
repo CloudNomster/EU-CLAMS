@@ -17,11 +17,12 @@ type ScreenshotManager struct {
 	gameWindowTitle string
 	enabled         bool
 	lastScreenshot  time.Time
-	platformSupport bool // Whether the current platform supports screenshots
+	platformSupport bool          // Whether the current platform supports screenshots
+	captureDelay    time.Duration // Delay before taking screenshot to allow UI to update
 }
 
 // NewScreenshotManager creates a new screenshot manager
-func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool) *ScreenshotManager {
+func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool, delaySeconds float64) *ScreenshotManager {
 	// Check if we're on Windows, which is the only platform with screenshot support
 	platformSupport := runtime.GOOS == "windows"
 
@@ -31,6 +32,7 @@ func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool) *
 		enabled:         enabled && platformSupport, // Only enable if platform supports it
 		lastScreenshot:  time.Time{},
 		platformSupport: platformSupport,
+		captureDelay:    time.Duration(delaySeconds * float64(time.Second)),
 	}
 }
 
@@ -47,7 +49,6 @@ func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry)
 	if !sm.lastScreenshot.IsZero() && time.Since(sm.lastScreenshot) < 2*time.Second {
 		return "", fmt.Errorf("screenshot already taken recently")
 	}
-
 	// Create prefix based on global type and whether it's a HoF
 	prefix := entry.Type
 	if entry.IsHof {
@@ -55,6 +56,9 @@ func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry)
 	} else {
 		prefix = "global_" + prefix
 	}
+	// Add global value to prefix right after global_/hof_ prefix
+	prefix += fmt.Sprintf("_%.2f", entry.Value)
+	prefix += "Ped"
 
 	// Add player or team name to prefix
 	if entry.TeamName != "" {
@@ -71,12 +75,17 @@ func (sm *ScreenshotManager) TakeScreenshotForGlobal(entry *storage.GlobalEntry)
 		if err == nil {
 			absScreenshotDir = filepath.Join(exeDir, sm.screenshotDir)
 		}
-	}
-
-	// Take the screenshot
-	filePath, err := screenshot.TakeScreenshot(sm.gameWindowTitle, absScreenshotDir, prefix)
+	} // Take the screenshot and get the full window title
+	filePath, fullWindowTitle, err := screenshot.TakeScreenshot(sm.gameWindowTitle, absScreenshotDir, prefix)
 	if err == nil {
 		sm.lastScreenshot = time.Now()
+
+		// If we got a window title, try to extract location if the global entry doesn't have one
+		if fullWindowTitle != "" && entry.Location == "" {
+			if location := screenshot.ExtractLocationFromWindowTitle(fullWindowTitle); location != "" {
+				entry.Location = location
+			}
+		}
 	}
 
 	return filePath, err

@@ -26,8 +26,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Add periodic refresh functionality (every 60 seconds)
-    setInterval(refreshData, 60000);
+    // Immediately refresh data when the page loads
+    refreshData();
+    
+    // Then add periodic refresh functionality (every 30 seconds)
+    setInterval(refreshData, 30000);
 });
 
 // Function to refresh data

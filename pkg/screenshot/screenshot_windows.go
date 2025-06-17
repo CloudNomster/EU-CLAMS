@@ -29,6 +29,7 @@ var (
 	procDeleteObject           = gdi32.NewProc("DeleteObject")
 	procGetDIBits              = gdi32.NewProc("GetDIBits")
 	procPrintWindow            = user32.NewProc("PrintWindow")
+	procIsWindowVisible        = user32.NewProc("IsWindowVisible")
 )
 
 // RECT is the Windows RECT structure
@@ -83,8 +84,15 @@ const (
 
 // FindWindowWithPartialTitle finds a window where the title starts with the given prefix
 func FindWindowWithPartialTitle(titlePrefix string) (syscall.Handle, error) {
+	handle, _, err := findWindowWithPartialTitleAndGetTitle(titlePrefix)
+	return handle, err
+}
+
+// findWindowWithPartialTitleAndGetTitle finds a window where the title starts with the given prefix and returns both handle and full title
+func findWindowWithPartialTitleAndGetTitle(titlePrefix string) (syscall.Handle, string, error) {
 	// Define the callback function for EnumWindows
 	var hwnd syscall.Handle
+	var fullWindowTitle string
 
 	// We need to convert the Go string to a format we can compare with Windows titles
 	titlePrefixLower := strings.ToLower(titlePrefix)
@@ -105,6 +113,7 @@ func FindWindowWithPartialTitle(titlePrefix string) (syscall.Handle, error) {
 		if strings.HasPrefix(strings.ToLower(titleStr), titlePrefixLower) && titleStr != "" {
 			// Found a matching window
 			hwnd = h
+			fullWindowTitle = titleStr
 			return 0 // Stop enumeration
 		}
 
@@ -116,10 +125,10 @@ func FindWindowWithPartialTitle(titlePrefix string) (syscall.Handle, error) {
 	procEnumWindows.Call(cb, 0)
 
 	if hwnd == 0 {
-		return 0, fmt.Errorf("no window with title prefix '%s' found", titlePrefix)
+		return 0, "", fmt.Errorf("no window with title prefix '%s' found", titlePrefix)
 	}
 
-	return hwnd, nil
+	return hwnd, fullWindowTitle, nil
 }
 
 // CaptureWindow takes a screenshot of the specified window by title
@@ -197,6 +206,15 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	// Create Go image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
+	// Calculate the required buffer size explicitly
+	// Each pixel needs 4 bytes (RGBA), so total size is width * height * 4
+	requiredBufferSize := width * height * 4
+
+	// Ensure our image buffer is large enough
+	if len(img.Pix) < requiredBufferSize {
+		return nil, fmt.Errorf("image buffer too small: got %d bytes, need %d bytes", len(img.Pix), requiredBufferSize)
+	}
+
 	// Prepare BITMAPINFO structure
 	bmi := BITMAPINFO{}
 	bmi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmi.BmiHeader))
@@ -205,7 +223,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	bmi.BmiHeader.BiPlanes = 1
 	bmi.BmiHeader.BiBitCount = 32
 	bmi.BmiHeader.BiCompression = BI_RGB
-	bmi.BmiHeader.BiSizeImage = uint32(len(img.Pix)) // Set explicit size
+	bmi.BmiHeader.BiSizeImage = uint32(requiredBufferSize) // Use the explicitly calculated size
 
 	// Try alternative methods if the first GetDIBits call fails
 	ret, _, _ = procGetDIBits.Call(
@@ -214,11 +232,10 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 		uintptr(unsafe.Pointer(&img.Pix[0])),
 		uintptr(unsafe.Pointer(&bmi)),
 		DIB_RGB_COLORS)
-
 	if ret == 0 {
 		// Try a different approach with separate buffer allocation
-		bufferSize := width * height * 4
-		buffer := make([]byte, bufferSize)
+		// Use the previously calculated buffer size to ensure consistency
+		buffer := make([]byte, requiredBufferSize)
 
 		ret, _, lastErr := procGetDIBits.Call(
 			hdcMem, hBitmap,
@@ -228,10 +245,13 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			DIB_RGB_COLORS)
 
 		if ret == 0 {
-			return nil, fmt.Errorf("failed to get DIB bits: %v", lastErr)
+			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes)", lastErr, width, height, requiredBufferSize)
 		}
 
 		// Copy from buffer to image
+		if len(buffer) > len(img.Pix) {
+			return nil, fmt.Errorf("buffer size mismatch: buffer=%d bytes, image=%d bytes", len(buffer), len(img.Pix))
+		}
 		copy(img.Pix, buffer)
 	}
 
@@ -244,16 +264,28 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 }
 
 // TakeScreenshot captures a screenshot of the Entropia Universe client window and saves it to the specified directory
-func TakeScreenshot(windowTitle, screenshotDir, screenshotPrefix string) (string, error) {
+// It returns the saved screenshot path and the full window title
+func TakeScreenshot(windowTitle, screenshotDir, screenshotPrefix string) (string, string, error) {
 	// Ensure screenshot directory exists
 	if err := os.MkdirAll(screenshotDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create screenshot directory: %w", err)
+		return "", "", fmt.Errorf("failed to create screenshot directory: %w", err)
+	}
+
+	// First get the full window title and handle
+	hwnd, fullTitle, err := findWindowWithPartialTitleAndGetTitle(windowTitle)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to find window: %w", err)
+	}
+
+	// Check if the window is visible before taking a screenshot
+	if !IsWindowVisible(hwnd) {
+		return "", fullTitle, fmt.Errorf("window is not visible: %s", fullTitle)
 	}
 
 	// Capture window
 	img, err := CaptureWindow(windowTitle)
 	if err != nil {
-		return "", fmt.Errorf("failed to capture window: %w", err)
+		return "", fullTitle, fmt.Errorf("failed to capture window: %w", err)
 	}
 
 	// Create filename with timestamp
@@ -264,14 +296,49 @@ func TakeScreenshot(windowTitle, screenshotDir, screenshotPrefix string) (string
 	// Save to file
 	file, err := os.Create(fullPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create file: %w", err)
+		return "", fullTitle, fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
 	// Encode as PNG
 	if err := png.Encode(file, img); err != nil {
-		return "", fmt.Errorf("failed to encode image: %w", err)
+		return "", fullTitle, fmt.Errorf("failed to encode image: %w", err)
 	}
 
-	return fullPath, nil
+	return fullPath, fullTitle, nil
+}
+
+// ExtractLocationFromWindowTitle attempts to extract a location name from the window title
+// Location is expected to be in square brackets [] in the window title
+// e.g., "Entropia Universe Client (64 bit) [Calypso]"
+func ExtractLocationFromWindowTitle(windowTitle string) string {
+	// Check if the title has any content in square brackets
+	idx := strings.LastIndex(windowTitle, "[")
+	if idx == -1 {
+		return "" // No square brackets found
+	}
+
+	closingIdx := strings.LastIndex(windowTitle, "]")
+	if closingIdx == -1 || closingIdx < idx {
+		return "" // No closing bracket or it's before the opening one
+	}
+
+	// Extract the content between the square brackets
+	locationName := windowTitle[idx+1 : closingIdx]
+	return strings.TrimSpace(locationName)
+}
+
+// GetFullWindowTitle finds the window with the given title prefix and returns its full title
+func GetFullWindowTitle(windowTitle string) (string, error) {
+	_, fullTitle, err := findWindowWithPartialTitleAndGetTitle(windowTitle)
+	if err != nil {
+		return "", err
+	}
+	return fullTitle, nil
+}
+
+// IsWindowVisible checks if the window with the given handle is visible
+func IsWindowVisible(hwnd syscall.Handle) bool {
+	ret, _, _ := procIsWindowVisible.Call(uintptr(hwnd))
+	return ret != 0
 }

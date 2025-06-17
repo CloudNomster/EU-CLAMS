@@ -28,25 +28,28 @@ type WebService struct {
 	server      *http.Server
 	clients     map[*websocket.Conn]bool
 	clientsLock sync.Mutex
-	upgrader    websocket.Upgrader
-	templates   *template.Template
-	templateDir string
-	staticDir   string
+	// Add a map to store write mutexes for each connection
+	writeLockers map[*websocket.Conn]*sync.Mutex
+	upgrader     websocket.Upgrader
+	templates    *template.Template
+	templateDir  string
+	staticDir    string
 }
 
 // NewWebService creates a new WebService instance
 func NewWebService(log *logger.Logger, db *storage.EntropyDB, playerName, teamName string, port int) *WebService {
 	return &WebService{
-		BaseService: NewBaseService("WebService"),
-		log:         log,
-		db:          db,
-		playerName:  playerName,
-		teamName:    teamName,
-		port:        port,
-		clients:     make(map[*websocket.Conn]bool),
-		upgrader:    websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
-		templateDir: getTemplateDir(),
-		staticDir:   getStaticDir(),
+		BaseService:  NewBaseService("WebService"),
+		log:          log,
+		db:           db,
+		playerName:   playerName,
+		teamName:     teamName,
+		port:         port,
+		clients:      make(map[*websocket.Conn]bool),
+		writeLockers: make(map[*websocket.Conn]*sync.Mutex),
+		upgrader:     websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
+		templateDir:  getTemplateDir(),
+		staticDir:    getStaticDir(),
 	}
 }
 
@@ -136,11 +139,11 @@ func (s *WebService) Run() error {
 // Stop stops the web server
 func (s *WebService) Stop() error {
 	s.log.Info("WebService stopping...")
-
 	// Close all websocket connections
 	s.clientsLock.Lock()
 	for client := range s.clients {
 		client.Close()
+		delete(s.writeLockers, client)
 	}
 	s.clientsLock.Unlock()
 
@@ -161,7 +164,7 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate stats
+	// Generate stats - always get fresh data from the database
 	statsData := s.db.GetStatsData()
 	allGlobals := s.db.GetPlayerGlobals()
 	allHofs := s.db.GetPlayerHofs()
@@ -188,9 +191,13 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Hofs":       hofs,
 		"Generated":  time.Now().UTC().Format(time.RFC3339),
 	}
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	w.Header().Set("Content-Type", "text/html")
 
 	// Render the template
-	w.Header().Set("Content-Type", "text/html")
 	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
 		s.log.Error("Failed to render template: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -199,8 +206,15 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // handleStats handles the stats API endpoint
 func (s *WebService) handleStats(w http.ResponseWriter, r *http.Request) {
+	// Always get fresh stats from the database
 	statsData := s.db.GetStatsData()
+
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
+
 	json.NewEncoder(w).Encode(statsData)
 }
 
@@ -213,10 +227,13 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Always get fresh globals from the database
 	globals := s.db.GetPlayerGlobals()
 	if len(globals) > limit {
 		globals = globals[:limit] // Take first 10 (already sorted newest first)
-	} // Convert to JSON-friendly objects with ISO8601 UTC timestamps
+	}
+
+	// Convert to JSON-friendly objects with ISO8601 UTC timestamps
 	jsonGlobals := make([]model.GlobalEntryJSON, len(globals))
 	for i, g := range globals {
 		jsonGlobals[i] = model.GlobalEntryJSON{
@@ -232,7 +249,12 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
+
 	json.NewEncoder(w).Encode(jsonGlobals)
 }
 
@@ -245,10 +267,13 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Always get fresh HOFs from the database
 	hofs := s.db.GetPlayerHofs()
 	if len(hofs) > limit {
 		hofs = hofs[:limit] // Take first 10 (already sorted newest first)
-	} // Convert to JSON-friendly objects with ISO8601 UTC timestamps
+	}
+
+	// Convert to JSON-friendly objects with ISO8601 UTC timestamps
 	jsonHofs := make([]model.GlobalEntryJSON, len(hofs))
 	for i, h := range hofs {
 		jsonHofs[i] = model.GlobalEntryJSON{
@@ -264,7 +289,12 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Set headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
+
 	json.NewEncoder(w).Encode(jsonHofs)
 }
 
@@ -276,16 +306,16 @@ func (s *WebService) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-
 	// Register client
 	s.clientsLock.Lock()
 	s.clients[conn] = true
+	s.writeLockers[conn] = &sync.Mutex{}
 	s.clientsLock.Unlock()
-
 	// Remove client when connection closes
 	defer func() {
 		s.clientsLock.Lock()
 		delete(s.clients, conn)
+		delete(s.writeLockers, conn)
 		s.clientsLock.Unlock()
 	}()
 
@@ -330,18 +360,27 @@ func (s *WebService) BroadcastEvent(eventType string, data interface{}) {
 		s.log.Error("Failed to marshal event: %v", err)
 		return
 	}
-
 	s.clientsLock.Lock()
+	clientsCopy := make(map[*websocket.Conn]*sync.Mutex)
 	for client := range s.clients {
-		go func(c *websocket.Conn) {
+		clientsCopy[client] = s.writeLockers[client]
+	}
+	s.clientsLock.Unlock()
+
+	for client, mutex := range clientsCopy {
+		go func(c *websocket.Conn, mu *sync.Mutex) {
+			mu.Lock()
+			defer mu.Unlock()
+
 			if err := c.WriteMessage(websocket.TextMessage, payload); err != nil {
 				s.log.Error("Failed to send WebSocket message: %v", err)
 				c.Close()
+
 				s.clientsLock.Lock()
 				delete(s.clients, c)
+				delete(s.writeLockers, c)
 				s.clientsLock.Unlock()
 			}
-		}(client)
+		}(client, mutex)
 	}
-	s.clientsLock.Unlock()
 }
