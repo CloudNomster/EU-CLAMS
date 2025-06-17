@@ -206,6 +206,15 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	// Create Go image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
+	// Calculate the required buffer size explicitly
+	// Each pixel needs 4 bytes (RGBA), so total size is width * height * 4
+	requiredBufferSize := width * height * 4
+
+	// Ensure our image buffer is large enough
+	if len(img.Pix) < requiredBufferSize {
+		return nil, fmt.Errorf("image buffer too small: got %d bytes, need %d bytes", len(img.Pix), requiredBufferSize)
+	}
+
 	// Prepare BITMAPINFO structure
 	bmi := BITMAPINFO{}
 	bmi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmi.BmiHeader))
@@ -214,7 +223,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	bmi.BmiHeader.BiPlanes = 1
 	bmi.BmiHeader.BiBitCount = 32
 	bmi.BmiHeader.BiCompression = BI_RGB
-	bmi.BmiHeader.BiSizeImage = uint32(len(img.Pix)) // Set explicit size
+	bmi.BmiHeader.BiSizeImage = uint32(requiredBufferSize) // Use the explicitly calculated size
 
 	// Try alternative methods if the first GetDIBits call fails
 	ret, _, _ = procGetDIBits.Call(
@@ -223,11 +232,10 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 		uintptr(unsafe.Pointer(&img.Pix[0])),
 		uintptr(unsafe.Pointer(&bmi)),
 		DIB_RGB_COLORS)
-
 	if ret == 0 {
 		// Try a different approach with separate buffer allocation
-		bufferSize := width * height * 4
-		buffer := make([]byte, bufferSize)
+		// Use the previously calculated buffer size to ensure consistency
+		buffer := make([]byte, requiredBufferSize)
 
 		ret, _, lastErr := procGetDIBits.Call(
 			hdcMem, hBitmap,
@@ -237,10 +245,13 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			DIB_RGB_COLORS)
 
 		if ret == 0 {
-			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, buffer=%d bytes)", lastErr, width, height, len(img.Pix))
+			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes)", lastErr, width, height, requiredBufferSize)
 		}
 
 		// Copy from buffer to image
+		if len(buffer) > len(img.Pix) {
+			return nil, fmt.Errorf("buffer size mismatch: buffer=%d bytes, image=%d bytes", len(buffer), len(img.Pix))
+		}
 		copy(img.Pix, buffer)
 	}
 
