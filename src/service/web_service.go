@@ -28,25 +28,28 @@ type WebService struct {
 	server      *http.Server
 	clients     map[*websocket.Conn]bool
 	clientsLock sync.Mutex
-	upgrader    websocket.Upgrader
-	templates   *template.Template
-	templateDir string
-	staticDir   string
+	// Add a map to store write mutexes for each connection
+	writeLockers map[*websocket.Conn]*sync.Mutex
+	upgrader     websocket.Upgrader
+	templates    *template.Template
+	templateDir  string
+	staticDir    string
 }
 
 // NewWebService creates a new WebService instance
 func NewWebService(log *logger.Logger, db *storage.EntropyDB, playerName, teamName string, port int) *WebService {
 	return &WebService{
-		BaseService: NewBaseService("WebService"),
-		log:         log,
-		db:          db,
-		playerName:  playerName,
-		teamName:    teamName,
-		port:        port,
-		clients:     make(map[*websocket.Conn]bool),
-		upgrader:    websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
-		templateDir: getTemplateDir(),
-		staticDir:   getStaticDir(),
+		BaseService:  NewBaseService("WebService"),
+		log:          log,
+		db:           db,
+		playerName:   playerName,
+		teamName:     teamName,
+		port:         port,
+		clients:      make(map[*websocket.Conn]bool),
+		writeLockers: make(map[*websocket.Conn]*sync.Mutex),
+		upgrader:     websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
+		templateDir:  getTemplateDir(),
+		staticDir:    getStaticDir(),
 	}
 }
 
@@ -136,11 +139,11 @@ func (s *WebService) Run() error {
 // Stop stops the web server
 func (s *WebService) Stop() error {
 	s.log.Info("WebService stopping...")
-
 	// Close all websocket connections
 	s.clientsLock.Lock()
 	for client := range s.clients {
 		client.Close()
+		delete(s.writeLockers, client)
 	}
 	s.clientsLock.Unlock()
 
@@ -303,16 +306,16 @@ func (s *WebService) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-
 	// Register client
 	s.clientsLock.Lock()
 	s.clients[conn] = true
+	s.writeLockers[conn] = &sync.Mutex{}
 	s.clientsLock.Unlock()
-
 	// Remove client when connection closes
 	defer func() {
 		s.clientsLock.Lock()
 		delete(s.clients, conn)
+		delete(s.writeLockers, conn)
 		s.clientsLock.Unlock()
 	}()
 
@@ -357,18 +360,27 @@ func (s *WebService) BroadcastEvent(eventType string, data interface{}) {
 		s.log.Error("Failed to marshal event: %v", err)
 		return
 	}
-
 	s.clientsLock.Lock()
+	clientsCopy := make(map[*websocket.Conn]*sync.Mutex)
 	for client := range s.clients {
-		go func(c *websocket.Conn) {
+		clientsCopy[client] = s.writeLockers[client]
+	}
+	s.clientsLock.Unlock()
+
+	for client, mutex := range clientsCopy {
+		go func(c *websocket.Conn, mu *sync.Mutex) {
+			mu.Lock()
+			defer mu.Unlock()
+
 			if err := c.WriteMessage(websocket.TextMessage, payload); err != nil {
 				s.log.Error("Failed to send WebSocket message: %v", err)
 				c.Close()
+
 				s.clientsLock.Lock()
 				delete(s.clients, c)
+				delete(s.writeLockers, c)
 				s.clientsLock.Unlock()
 			}
-		}(client)
+		}(client, mutex)
 	}
-	s.clientsLock.Unlock()
 }
