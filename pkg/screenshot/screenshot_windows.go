@@ -226,12 +226,16 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	bmi.BmiHeader.BiSizeImage = uint32(requiredBufferSize) // Use the explicitly calculated size
 
 	// Try alternative methods if the first GetDIBits call fails
-	ret, _, _ = procGetDIBits.Call(
+	ret, _, err = procGetDIBits.Call(
 		hdcMem, hBitmap,
 		0, uintptr(height),
 		uintptr(unsafe.Pointer(&img.Pix[0])),
 		uintptr(unsafe.Pointer(&bmi)),
 		DIB_RGB_COLORS)
+	if err != nil {
+		log.Error("failed to get DIB bits: %v (width=%d, height=%d, required buffer=%d bytes, image size=%d)", err.Error(), width, height, requiredBufferSize, len(img.Pix))
+	}
+
 	if ret == 0 {
 		// Try a different approach with separate buffer allocation
 		// Use the previously calculated buffer size to ensure consistency
