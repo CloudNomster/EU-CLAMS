@@ -29,6 +29,7 @@ var (
 	procDeleteObject           = gdi32.NewProc("DeleteObject")
 	procGetDIBits              = gdi32.NewProc("GetDIBits")
 	procPrintWindow            = user32.NewProc("PrintWindow")
+	procIsWindowVisible        = user32.NewProc("IsWindowVisible")
 )
 
 // RECT is the Windows RECT structure
@@ -236,7 +237,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			DIB_RGB_COLORS)
 
 		if ret == 0 {
-			return nil, fmt.Errorf("failed to get DIB bits: %v", lastErr)
+			return nil, fmt.Errorf("failed to get DIB bits: %v (width=%d, height=%d, buffer=%d bytes)", lastErr, width, height, len(img.Pix))
 		}
 
 		// Copy from buffer to image
@@ -259,10 +260,15 @@ func TakeScreenshot(windowTitle, screenshotDir, screenshotPrefix string) (string
 		return "", "", fmt.Errorf("failed to create screenshot directory: %w", err)
 	}
 
-	// First get the full window title
-	_, fullTitle, err := findWindowWithPartialTitleAndGetTitle(windowTitle)
+	// First get the full window title and handle
+	hwnd, fullTitle, err := findWindowWithPartialTitleAndGetTitle(windowTitle)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to find window: %w", err)
+	}
+
+	// Check if the window is visible before taking a screenshot
+	if !IsWindowVisible(hwnd) {
+		return "", fullTitle, fmt.Errorf("window is not visible: %s", fullTitle)
 	}
 
 	// Capture window
@@ -318,4 +324,10 @@ func GetFullWindowTitle(windowTitle string) (string, error) {
 		return "", err
 	}
 	return fullTitle, nil
+}
+
+// IsWindowVisible checks if the window with the given handle is visible
+func IsWindowVisible(hwnd syscall.Handle) bool {
+	ret, _, _ := procIsWindowVisible.Call(uintptr(hwnd))
+	return ret != 0
 }
