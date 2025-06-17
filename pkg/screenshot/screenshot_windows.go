@@ -292,20 +292,21 @@ func TakeScreenshot(windowTitle, screenshotDir, screenshotPrefix string) (string
 }
 
 // ExtractLocationFromWindowTitle attempts to extract a location name from the window title
-// Location is expected to be in parentheses at the end of the title
+// Location is expected to be in square brackets [] in the window title
+// e.g., "Entropia Universe Client (64 bit) [Calypso]"
 func ExtractLocationFromWindowTitle(windowTitle string) string {
-	// Check if the title has any content in parentheses at the end
-	idx := strings.LastIndex(windowTitle, "(")
+	// Check if the title has any content in square brackets
+	idx := strings.LastIndex(windowTitle, "[")
 	if idx == -1 {
-		return "" // No parentheses found
+		return "" // No square brackets found
 	}
 
-	closingIdx := strings.LastIndex(windowTitle, ")")
+	closingIdx := strings.LastIndex(windowTitle, "]")
 	if closingIdx == -1 || closingIdx < idx {
-		return "" // No closing parenthesis or it's before the opening one
+		return "" // No closing bracket or it's before the opening one
 	}
 
-	// Extract the content between the parentheses
+	// Extract the content between the square brackets
 	locationName := windowTitle[idx+1 : closingIdx]
 	return strings.TrimSpace(locationName)
 }
