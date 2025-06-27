@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -35,6 +36,12 @@ type MainGUI struct {
 	statusLabel   *widget.Label
 	monitorButton *widget.Button
 	infoLabel     *widget.Label
+
+	// Configuration reloading
+	configPath     string
+	reloadTicker   *time.Ticker
+	stopReload     chan bool
+	lastConfigHash string
 }
 
 // NewMainGUI creates a new main GUI
@@ -48,6 +55,8 @@ func NewMainGUI(log *logger.Logger, cfg config.Config) *MainGUI {
 		config:       cfg,
 		log:          log,
 		isMonitoring: false,
+		configPath:   "config.yaml", // Default config path
+		stopReload:   make(chan bool),
 	}
 
 	return gui
@@ -62,7 +71,6 @@ func (g *MainGUI) Show() {
 		g.Close()
 		g.mainWindow.Close()
 	})
-
 	// Start the web server if enabled in the config
 	if g.config.EnableWebServer {
 		url, err := g.initWebServer()
@@ -72,6 +80,9 @@ func (g *MainGUI) Show() {
 			g.log.Info("Web server started successfully at %s", url)
 		}
 	}
+
+	// Start configuration auto-reloading
+	g.startConfigReloading()
 
 	g.mainWindow.ShowAndRun()
 }
@@ -537,9 +548,7 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 				dialog.ShowError(fmt.Errorf("invalid web server port: must be a positive number"), g.mainWindow)
 				return
 			}
-			g.config.WebServerPort = webServerPort
-
-			// Save to file
+			g.config.WebServerPort = webServerPort // Save to file
 			err := g.config.SaveConfigToFile("config.yaml")
 			if err != nil {
 				dialog.ShowError(err, g.mainWindow)
@@ -549,16 +558,14 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 
 			g.log.Info("Configuration saved successfully")
 
-			// Update the info label in the dashboard
-			infoText := fmt.Sprintf("Player: %s\nTeam: %s\n",
-				valueOrEmpty(g.config.PlayerName, "Not set"),
-				valueOrEmpty(g.config.TeamName, "Not set"))
-			g.infoLabel.SetText(infoText)
+			// Update the config file hash to prevent auto-reload from triggering immediately
+			g.lastConfigHash = g.getConfigFileHash()
 
-			// Update services if needed
-			if g.dataService != nil {
-				// Reload with new config
-			}
+			// Update UI components immediately
+			g.updateUIFromConfig()
+
+			// Update services if needed (pass old config for comparison)
+			g.updateServicesFromConfig(g.config)
 
 			// Show success message
 			dialog.ShowInformation("Success", "Configuration saved successfully", g.mainWindow)
@@ -635,10 +642,17 @@ func (g *MainGUI) createDebugTab() fyne.CanvasObject {
 		}()
 	})
 
+	// Create config reload test button
+	configReloadButton := widget.NewButtonWithIcon("Force Config Reload", theme.ViewRefreshIcon(), func() {
+		g.ForceReloadConfig()
+		debugStatusLabel.SetText("Configuration reloaded manually")
+	})
+
 	// Create debug tools section
 	debugToolsBox := container.NewVBox(
 		widget.NewLabelWithStyle("Debug Tools", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		screenshotTestButton,
+		configReloadButton,
 		debugStatusLabel,
 	)
 
@@ -754,6 +768,9 @@ func (g *MainGUI) createStatsTab() fyne.CanvasObject {
 
 // Close properly cleans up resources before closing the application
 func (g *MainGUI) Close() {
+	// Stop configuration auto-reloading
+	g.stopConfigReloading()
+
 	// Stop the monitoring if active
 	if g.isMonitoring && g.dataService != nil {
 		g.stopMonitoring()
@@ -769,4 +786,144 @@ func (g *MainGUI) Close() {
 	}
 
 	g.log.Info("Application closing")
+}
+
+// SetConfigPath sets the path to the configuration file for auto-reloading
+func (g *MainGUI) SetConfigPath(path string) {
+	g.configPath = path
+}
+
+// startConfigReloading starts the automatic configuration reloading timer
+func (g *MainGUI) startConfigReloading() {
+	if g.reloadTicker != nil {
+		g.reloadTicker.Stop()
+	}
+
+	g.reloadTicker = time.NewTicker(3 * time.Second)
+	g.lastConfigHash = g.getConfigFileHash()
+
+	go func() {
+		for {
+			select {
+			case <-g.reloadTicker.C:
+				g.checkAndReloadConfig()
+			case <-g.stopReload:
+				g.reloadTicker.Stop()
+				return
+			}
+		}
+	}()
+
+	g.log.Info("Started configuration auto-reload (every 3 seconds)")
+}
+
+// stopConfigReloading stops the automatic configuration reloading
+func (g *MainGUI) stopConfigReloading() {
+	if g.reloadTicker != nil {
+		g.reloadTicker.Stop()
+		g.reloadTicker = nil
+	}
+
+	select {
+	case g.stopReload <- true:
+	default:
+	}
+}
+
+// getConfigFileHash returns a simple hash of the config file to detect changes
+func (g *MainGUI) getConfigFileHash() string {
+	if g.configPath == "" {
+		return ""
+	}
+
+	info, err := os.Stat(g.configPath)
+	if err != nil {
+		return ""
+	}
+
+	// Use modification time and size as a simple hash
+	return fmt.Sprintf("%d_%d", info.ModTime().Unix(), info.Size())
+}
+
+// checkAndReloadConfig checks if the config file has changed and reloads it
+func (g *MainGUI) checkAndReloadConfig() {
+	currentHash := g.getConfigFileHash()
+	if currentHash != "" && currentHash != g.lastConfigHash {
+		g.log.Info("Configuration file changed, reloading...")
+		g.reloadConfig()
+		g.lastConfigHash = currentHash
+	}
+}
+
+// reloadConfig reloads the configuration from file and updates the GUI
+func (g *MainGUI) reloadConfig() {
+	if g.configPath == "" {
+		return
+	}
+
+	newConfig, err := config.LoadConfigFromFile(g.configPath)
+	if err != nil {
+		g.log.Error("Failed to reload configuration: %v", err)
+		return
+	}
+
+	// Update the config
+	oldConfig := g.config
+	g.config = newConfig
+
+	// Update GUI components on the UI thread
+	fyne.Do(func() {
+		g.updateUIFromConfig()
+		g.updateServicesFromConfig(oldConfig)
+	})
+
+	g.log.Info("Configuration reloaded successfully")
+}
+
+// updateUIFromConfig updates the GUI components with the new configuration
+func (g *MainGUI) updateUIFromConfig() {
+	// Update the info label in the dashboard
+	if g.infoLabel != nil {
+		infoText := fmt.Sprintf("Player: %s\nTeam: %s\n",
+			valueOrEmpty(g.config.PlayerName, "Not set"),
+			valueOrEmpty(g.config.TeamName, "Not set"))
+		g.infoLabel.SetText(infoText)
+	}
+}
+
+// updateServicesFromConfig updates services when configuration changes
+func (g *MainGUI) updateServicesFromConfig(oldConfig config.Config) {
+	// Restart web server if web server settings changed
+	if oldConfig.EnableWebServer != g.config.EnableWebServer ||
+		oldConfig.WebServerPort != g.config.WebServerPort {
+
+		// Stop old web server if it was running
+		if g.webService != nil {
+			g.webService.Stop()
+			g.webService = nil
+		}
+
+		// Start new web server if enabled
+		if g.config.EnableWebServer {
+			url, err := g.initWebServer()
+			if err != nil {
+				g.log.Error("Failed to restart web server: %v", err)
+			} else {
+				g.log.Info("Web server restarted at %s", url)
+			}
+		}
+	}
+
+	// Update data service if it exists and database path changed
+	if g.dataService != nil && oldConfig.DatabasePath != g.config.DatabasePath {
+		// Note: DataProcessorService would need methods to update its config
+		// For now, we'll just log that the database path changed
+		g.log.Info("Database path changed, restart monitoring to apply changes")
+	}
+}
+
+// ForceReloadConfig manually forces a configuration reload (useful for testing or debugging)
+func (g *MainGUI) ForceReloadConfig() {
+	g.log.Info("Manually triggering configuration reload...")
+	g.reloadConfig()
 }

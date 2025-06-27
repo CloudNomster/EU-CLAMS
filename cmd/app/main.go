@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "0.1.7"
+	version = "0.1.10"
 )
 
 var log = logger.New()
@@ -51,14 +51,15 @@ func main() { // Define command-line flags
 	}
 
 	log.Info("EU-CLAMS starting...")
-
 	// Load configuration
 	var cfg config.Config
+	var actualConfigPath string
 
 	if *configPath != "" {
 		var err error
-		log.Info("Loading configuration from: %s", *configPath)
-		cfg, err = config.LoadConfigFromFile(*configPath)
+		actualConfigPath = *configPath
+		log.Info("Loading configuration from: %s", actualConfigPath)
+		cfg, err = config.LoadConfigFromFile(actualConfigPath)
 		if err != nil {
 			log.Error("Failed to load config: %v", err)
 			os.Exit(1)
@@ -67,8 +68,9 @@ func main() { // Define command-line flags
 		// Check for config.yaml in current directory
 		defaultConfigPath := "config.yaml"
 		if _, err := os.Stat(defaultConfigPath); err == nil {
-			log.Info("Loading configuration from: %s", defaultConfigPath)
-			cfg, err = config.LoadConfigFromFile(defaultConfigPath)
+			actualConfigPath = defaultConfigPath
+			log.Info("Loading configuration from: %s", actualConfigPath)
+			cfg, err = config.LoadConfigFromFile(actualConfigPath)
 			if err != nil {
 				log.Error("Failed to load config: %v", err)
 				os.Exit(1)
@@ -77,6 +79,7 @@ func main() { // Define command-line flags
 			// Use default configuration
 			log.Info("No configuration file found, using default configuration")
 			cfg = config.NewDefaultConfig()
+			actualConfigPath = "config.yaml" // Default path for saving
 		}
 
 		// Ensure database path is absolute
@@ -222,7 +225,7 @@ func main() { // Define command-line flags
 		cfg.EnableWebServer = false
 		log.Info("Web server already started via command line, disabling automatic start in GUI")
 	}
-
 	mainGUI := gui.NewMainGUI(log, cfg)
+	mainGUI.SetConfigPath(actualConfigPath)
 	mainGUI.Show()
 }

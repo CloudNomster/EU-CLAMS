@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"eu-clams/internal/logger"
 	"fmt"
+	"html"
 	"os"
 	"regexp"
 	"sort"
@@ -44,8 +45,8 @@ func NewEntropyDB(playerName string, teamName string) *EntropyDB {
 }
 
 // regular expressions for parsing different types of global messages
-var ( // For team kills
-	teamKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*Team\s*"([^"]+)"\s*killed\s*a\s*creature\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+var ( // For team kills - handle both literal quotes and HTML entities
+	teamKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*Team\s*(?:"([^"]+)"|&quot;([^&]*?)&quot;)\s*killed\s*a\s*creature\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 
 	// For individual kills
 	playerKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*(?:as|has|have)?\s*killed\s*a\s*creature\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
@@ -53,8 +54,8 @@ var ( // For team kills
 	// For crafting
 	craftRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*constructed\s*an\s*item\s*\(([^)]+)\)\s*worth\s*(\d+)\s*PED(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 
-	// For mining/deposits
-	findRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*(?:Team\s*"([^"]+)"|([^\s]+(?:\s+[^\s]+){0,3}))\s*found\s*a\s*deposit\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+	// For mining/deposits - handle both literal quotes and HTML entities
+	findRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*(?:Team\s*(?:"([^"]+)"|&quot;([^&]*?)&quot;)|([^\s]+(?:\s+[^\s]+){0,3}))\s*found\s*a\s*deposit\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 )
 
 // ParseChatLine parses a single line from the chat log and returns a GlobalEntry if it's a global message
@@ -79,16 +80,20 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 	entry := GlobalEntry{
 		Timestamp:  timestamp,
 		RawMessage: line,
-	}
-
-	// Try to match against different global message patterns
+	} // Try to match against different global message patterns
 	if matches := teamKillRegex.FindStringSubmatch(line); matches != nil {
 		entry.Type = "kill"
-		entry.TeamName = matches[1]
-		entry.Target = matches[2]
-		entry.Value = parseValue(matches[3])
-		if len(matches) > 4 && matches[4] != "" {
-			entry.Location = strings.TrimSpace(matches[4])
+		// Get team name from either literal quotes (group 1) or HTML entities (group 2)
+		teamName := matches[1]
+		if teamName == "" {
+			teamName = matches[2]
+		}
+		// Decode HTML entities in team name (e.g., &quot; becomes ")
+		entry.TeamName = html.UnescapeString(teamName)
+		entry.Target = matches[3]
+		entry.Value = parseValue(matches[4])
+		if len(matches) > 5 && matches[5] != "" {
+			entry.Location = strings.TrimSpace(matches[5])
 		}
 		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
@@ -107,7 +112,6 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
 		return &entry, nil
 	}
-
 	if matches := craftRegex.FindStringSubmatch(line); matches != nil {
 		entry.Type = "craft"
 		entry.PlayerName = matches[1]
@@ -120,13 +124,19 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 
 	if matches := findRegex.FindStringSubmatch(line); matches != nil {
 		entry.Type = "find"
-		if matches[1] != "" {
-			entry.TeamName = matches[1]
-		} else {
-			entry.PlayerName = matches[2]
+		// Get team name from either literal quotes (group 1) or HTML entities (group 2)
+		teamName := matches[1]
+		if teamName == "" {
+			teamName = matches[2]
 		}
-		entry.Target = matches[3]
-		entry.Value = parseValue(matches[4])
+		if teamName != "" {
+			// Decode HTML entities in team name (e.g., &quot; becomes ")
+			entry.TeamName = html.UnescapeString(teamName)
+		} else {
+			entry.PlayerName = matches[3]
+		}
+		entry.Target = matches[4]
+		entry.Value = parseValue(matches[5])
 		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
 		return &entry, nil
@@ -135,6 +145,38 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 	// Return nil if we couldn't parse this global message
 	// It could be another type we're not handling yet
 	return nil, nil
+}
+
+// normalizeTeamName removes surrounding quotes and normalizes team names for comparison
+func normalizeTeamName(teamName string) string {
+	if teamName == "" {
+		return ""
+	}
+
+	// First decode any HTML entities
+	teamName = html.UnescapeString(teamName)
+
+	// Then remove surrounding quotes if they exist
+	teamName = strings.TrimSpace(teamName)
+	if len(teamName) >= 2 {
+		if teamName[0] == '"' && teamName[len(teamName)-1] == '"' {
+			teamName = teamName[1 : len(teamName)-1]
+		}
+	}
+
+	return teamName
+}
+
+// teamNamesMatch compares two team names with normalization
+func teamNamesMatch(teamName1, teamName2 string) bool {
+	if teamName1 == "" || teamName2 == "" {
+		return false
+	}
+
+	normalized1 := normalizeTeamName(teamName1)
+	normalized2 := normalizeTeamName(teamName2)
+
+	return strings.EqualFold(normalized1, normalized2)
 }
 
 // parseValue converts a string PED value to float64
@@ -199,7 +241,6 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 			}
 			continue
 		}
-
 		if entry != nil {
 			if logger != nil {
 				logger.Info("Line %d - Found global: Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
@@ -207,7 +248,7 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 			}
 
 			matchPlayer := db.PlayerName == "" || strings.EqualFold(entry.PlayerName, db.PlayerName)
-			matchTeam := db.TeamName == "" || strings.EqualFold(entry.TeamName, db.TeamName)
+			matchTeam := db.TeamName == "" || teamNamesMatch(entry.TeamName, db.TeamName)
 
 			// Determine if we should include this entry based on filter settings
 			shouldInclude := false
@@ -320,7 +361,7 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 			// 2. It's the player's own global
 			// 3. It's from the player's team
 			matchPlayer := db.PlayerName == "" || strings.EqualFold(entry.PlayerName, db.PlayerName)
-			matchTeam := db.TeamName == "" || strings.EqualFold(entry.TeamName, db.TeamName)
+			matchTeam := db.TeamName == "" || teamNamesMatch(entry.TeamName, db.TeamName)
 
 			// Determine if we should include this entry based on filter settings
 			shouldInclude := false
