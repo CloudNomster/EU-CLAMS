@@ -54,7 +54,6 @@ jobs:
           
       - name: Create release ZIP file
         run: |
-          mkdir -p release
           zip -r eu-clams-${{ steps.get_version.outputs.VERSION }}.zip eu-clams.exe templates/
 
       - name: Create GitHub Release
