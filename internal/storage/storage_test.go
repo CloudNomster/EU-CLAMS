@@ -33,14 +33,21 @@ func TestParseChatLine(t *testing.T) {
 			wantHof:   false,
 			wantTeam:  "Test Team",
 			wantValue: 100,
-		},
-		{
+		}, {
 			name:      "HoF team kill with Hall of Fame text",
 			line:      "2025-05-16 10:00:00 [Globals] [] Team \"Test Team\" killed a creature (Test Beast) with a value of 100 PED! A record has been added to the Hall of Fame!",
 			wantType:  "kill",
 			wantHof:   true,
 			wantTeam:  "Test Team",
 			wantValue: 100,
+		},
+		{
+			name:      "Team kill with HTML entities in team name",
+			line:      "2025-06-27 18:09:18 [Globals] [] Team &quot;***DeagleTeam***&quot; killed a creature (Eomon Old Alpha) with a value of 268 PED at OLA#63!",
+			wantType:  "kill",
+			wantHof:   false,
+			wantTeam:  "***DeagleTeam***",
+			wantValue: 268,
 		},
 		{
 			name:      "Regular player kill",
@@ -268,6 +275,14 @@ func TestTeamNameFiltering(t *testing.T) {
 			wantPlayers: []string{"John Doe"},
 			wantTeams:   []string{"Alpha Team"},
 		},
+		{
+			name:     "Team filter with HTML entities - config without quotes",
+			teamName: "***DeagleTeam***",
+			logContent: "2025-06-27 18:09:18 [Globals] [] Team &quot;***DeagleTeam***&quot; killed a creature (Eomon Old Alpha) with a value of 268 PED at OLA#63!\n" +
+				"2025-06-27 18:10:00 [Globals] [] Other Player killed a creature (Test Beast) with a value of 50 PED\n",
+			wantCount: 1,
+			wantTeams: []string{"***DeagleTeam***"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -324,6 +339,85 @@ func TestTeamNameFiltering(t *testing.T) {
 	}
 }
 
+func TestTeamNameMatching(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		configTeam string
+		entryTeam  string
+		wantMatch  bool
+	}{
+		{
+			name:       "Exact match without quotes",
+			configTeam: "DeagleTeam",
+			entryTeam:  "DeagleTeam",
+			wantMatch:  true,
+		},
+		{
+			name:       "Config has no quotes, entry has quotes",
+			configTeam: "DeagleTeam",
+			entryTeam:  "\"DeagleTeam\"",
+			wantMatch:  true,
+		},
+		{
+			name:       "Config has quotes, entry has no quotes",
+			configTeam: "\"DeagleTeam\"",
+			entryTeam:  "DeagleTeam",
+			wantMatch:  true,
+		},
+		{
+			name:       "Both have quotes",
+			configTeam: "\"DeagleTeam\"",
+			entryTeam:  "\"DeagleTeam\"",
+			wantMatch:  true,
+		},
+		{
+			name:       "Case insensitive match",
+			configTeam: "deagleteam",
+			entryTeam:  "DeagleTeam",
+			wantMatch:  true,
+		},
+		{
+			name:       "With special characters and HTML entities",
+			configTeam: "***DeagleTeam***",
+			entryTeam:  "&quot;***DeagleTeam***&quot;",
+			wantMatch:  true,
+		},
+		{
+			name:       "Different teams",
+			configTeam: "TeamA",
+			entryTeam:  "TeamB",
+			wantMatch:  false,
+		},
+		{
+			name:       "Empty config team",
+			configTeam: "",
+			entryTeam:  "DeagleTeam",
+			wantMatch:  false,
+		},
+		{
+			name:       "Empty entry team",
+			configTeam: "DeagleTeam",
+			entryTeam:  "",
+			wantMatch:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := teamNamesMatch(tt.entryTeam, tt.configTeam)
+			if result != tt.wantMatch {
+				t.Errorf("teamNamesMatch(%q, %q) = %v, want %v", 
+					tt.entryTeam, tt.configTeam, result, tt.wantMatch)
+			}
+		})
+	}
+}
+
 // TestProcessChatLogFromOffsetMethod tests the ProcessChatLogFromOffset method
 func TestProcessChatLogFromOffsetMethod(t *testing.T) {
 	t.Parallel() // Allow test to run in parallel
@@ -362,6 +456,14 @@ func TestProcessChatLogFromOffsetMethod(t *testing.T) {
 			wantCount:   2,
 			wantPlayers: []string{"John Doe"},
 			wantTeams:   []string{"Alpha Team"},
+		},
+		{
+			name:     "Team filter with HTML entities - config without quotes",
+			teamName: "***DeagleTeam***",
+			logContent: "2025-06-27 18:09:18 [Globals] [] Team &quot;***DeagleTeam***&quot; killed a creature (Eomon Old Alpha) with a value of 268 PED at OLA#63!\n" +
+				"2025-06-27 18:10:00 [Globals] [] Other Player killed a creature (Test Beast) with a value of 50 PED\n",
+			wantCount: 1,
+			wantTeams: []string{"***DeagleTeam***"},
 		},
 	}
 
