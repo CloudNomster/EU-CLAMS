@@ -4,6 +4,10 @@ on:
   merge_group:
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.github/**'
 
 jobs:
   test-and-build:
