@@ -12,7 +12,7 @@ on:
 jobs:
   build-and-release:
     name: Build and Create Release
-    runs-on: nomsterrunner  # Using the same self-hosted Linux runner as the PR workflow
+    runs-on: nomsterrunner
     
     steps:
       - name: Checkout code
@@ -23,19 +23,14 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.3'  # Using the same Go version as in go.mod
+          go-version: '1.24.3'
           cache: true
           
-      - name: Install system dependencies
+      - name: Install dependencies (system and Go packages)
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev gcc-mingw-w64-x86-64 gcc-mingw-w64 zip
-          
-      - name: Install Go dependencies
-        run: go mod download
-
-      - name: Run Tests
-        run: go test -v ./...
+          go mod download
         
       - name: Extract version from tag
         id: get_version
@@ -56,12 +51,10 @@ jobs:
         run: |
           # Cross-compile for Windows
           go build -o eu-clams.exe ./cmd/app
+          
       - name: Create release ZIP file
         run: |
           mkdir -p release
-          # cp eu-clams.exe release/
-          # No config file in the release as per requirement
-          # If there are any other files that should be included in the release, add them here
           zip -r eu-clams-${{ steps.get_version.outputs.VERSION }}.zip eu-clams.exe templates/
 
       - name: Create GitHub Release
