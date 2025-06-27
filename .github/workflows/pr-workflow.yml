@@ -31,13 +31,3 @@ jobs:
 
       - name: Run Tests
         run: go test -v ./...
-        
-      - name: Build for Windows
-        env:
-          CGO_ENABLED: 1
-          GOOS: windows
-          GOARCH: amd64
-          CC: x86_64-w64-mingw32-gcc
-        run: |
-          # Cross-compile for Windows
-          go build -o eu-clams.exe ./cmd/app

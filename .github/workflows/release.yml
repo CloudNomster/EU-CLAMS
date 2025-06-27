@@ -31,16 +31,6 @@ jobs:
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev gcc-mingw-w64-x86-64 gcc-mingw-w64 zip
           go mod download
         
-      - name: Extract version from tag
-        id: get_version
-        run: |
-          # Extract version from tag (v1.2.3 -> 1.2.3)
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          
-          # Also update the version in FyneApp.toml
-          sed -i "s/Version = \".*\"/Version = \"$VERSION\"/" FyneApp.toml
-          
       - name: Build for Windows
         env:
           CGO_ENABLED: 1
