@@ -408,10 +408,10 @@ func TestTeamNameMatching(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := teamNamesMatch(tt.entryTeam, tt.configTeam)
 			if result != tt.wantMatch {
-				t.Errorf("teamNamesMatch(%q, %q) = %v, want %v", 
+				t.Errorf("teamNamesMatch(%q, %q) = %v, want %v",
 					tt.entryTeam, tt.configTeam, result, tt.wantMatch)
 			}
 		})

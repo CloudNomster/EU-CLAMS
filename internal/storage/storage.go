@@ -152,10 +152,10 @@ func normalizeTeamName(teamName string) string {
 	if teamName == "" {
 		return ""
 	}
-	
+
 	// First decode any HTML entities
 	teamName = html.UnescapeString(teamName)
-	
+
 	// Then remove surrounding quotes if they exist
 	teamName = strings.TrimSpace(teamName)
 	if len(teamName) >= 2 {
@@ -163,7 +163,7 @@ func normalizeTeamName(teamName string) string {
 			teamName = teamName[1 : len(teamName)-1]
 		}
 	}
-	
+
 	return teamName
 }
 
@@ -356,7 +356,7 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 			if logger != nil {
 				logger.Debug("Line %d - Found global: Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
 					lineNum, entry.Type, entry.PlayerName, entry.TeamName, entry.Target, entry.Value)
-			}			// Include the entry if any of these are true:
+			} // Include the entry if any of these are true:
 			// 1. No player/team filtering is enabled
 			// 2. It's the player's own global
 			// 3. It's from the player's team
