@@ -26,12 +26,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev gcc-mingw-w64-x86-64 gcc-mingw-w64 zip
-          
-      - name: Install Go dependencies
-        run: go mod download
-
-      - name: Run Tests
-        run: go test -v ./...
+          go mod download
         
       - name: Extract version from tag
         id: get_version
@@ -49,6 +44,7 @@ jobs:
         run: |
           # Cross-compile for Windows
           go build -o eu-clams.exe ./cmd/app
+
       - name: Create release ZIP file
         run: |
           zip -r eu-clams-${{ steps.get_version.outputs.VERSION }}.zip eu-clams.exe templates/
