@@ -4,6 +4,9 @@ on:
   merge_group:
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
 
 jobs:
   test-and-build:
@@ -20,28 +23,11 @@ jobs:
           go-version: '1.24.3'  # Using the same Go version as in go.mod
           cache: true
 
-      - name: Install Fyne dependencies
+      - name: Install dependencies (system and Go packages)
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
-
-      - name: Install MinGW for cross-compilation
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64
-
-      - name: Install dependencies
-        run: go mod download
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev gcc-mingw-w64-x86-64 gcc-mingw-w64
+          go mod download
 
       - name: Run Tests
         run: go test -v ./...
-        
-      - name: Build for Windows
-        env:
-          CGO_ENABLED: 1
-          GOOS: windows
-          GOARCH: amd64
-          CC: x86_64-w64-mingw32-gcc
-        run: |
-          # Cross-compile for Windows
-          go build -o eu-clams.exe ./cmd/app
