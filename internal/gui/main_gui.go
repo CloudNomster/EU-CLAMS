@@ -818,16 +818,17 @@ func (g *MainGUI) startConfigReloading() {
 	if g.reloadTicker != nil {
 		g.reloadTicker.Stop()
 	}
-
 	g.reloadTicker = time.NewTicker(3 * time.Second)
 
 	go func() {
+		ticker := g.reloadTicker // Store local reference to avoid race condition
+		defer ticker.Stop()      // Ensure ticker is always stopped when goroutine exits
+
 		for {
 			select {
-			case <-g.reloadTicker.C:
+			case <-ticker.C:
 				g.checkAndReloadConfig()
 			case <-g.stopReload:
-				g.reloadTicker.Stop()
 				return
 			}
 		}
@@ -843,9 +844,11 @@ func (g *MainGUI) stopConfigReloading() {
 		g.reloadTicker = nil
 	}
 
+	// Send stop signal to goroutine (non-blocking)
 	select {
 	case g.stopReload <- true:
 	default:
+		// Channel might be full or goroutine already stopped, that's ok
 	}
 }
 
