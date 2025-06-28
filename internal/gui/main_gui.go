@@ -216,7 +216,8 @@ func (g *MainGUI) startMonitoring() {
 				g.startMonitoringWithPath(chatLogPath)
 			}, g.mainWindow)
 			return
-		}	} else {
+		}
+	} else {
 		g.log.Info("Using chat log path from config: %s", chatLogPath)
 	}
 
@@ -531,7 +532,7 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			{Text: "Game Window Title", Widget: g.gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
 			{Text: "Enable Web Server", Widget: g.enableWebServerCheck, HintText: "Start a web server to view statistics"},
 			{Text: "Web Server Port", Widget: g.webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
-		},		OnSubmit: func() {
+		}, OnSubmit: func() {
 			// Update configuration values from form fields
 			g.config.PlayerName = g.playerNameEntry.Text
 			g.config.TeamName = g.teamNameEntry.Text
