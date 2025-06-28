@@ -6,6 +6,7 @@ type Config struct {
 	DatabasePath        string  `yaml:"database_path"`
 	PlayerName          string  `yaml:"player_name"`
 	TeamName            string  `yaml:"team_name"`
+	ChatLogPath         string  `yaml:"chat_log_path"` // Path to Entropia Universe chat.log file
 	EnableScreenshots   bool    `yaml:"enable_screenshots"`
 	ScreenshotDirectory string  `yaml:"screenshot_directory"`
 	ScreenshotDelay     float64 `yaml:"screenshot_delay"` // Delay in seconds before taking a screenshot
@@ -20,6 +21,8 @@ func NewDefaultConfig() Config {
 		AppName:             "EU-CLAMS",
 		DatabasePath:        "./data/db.yaml",
 		PlayerName:          "",
+		TeamName:            "",
+		ChatLogPath:         "", // Empty by default, will auto-detect if not specified
 		EnableScreenshots:   true,
 		ScreenshotDirectory: "./data/screenshots",
 		ScreenshotDelay:     0.6, // Default to 600ms

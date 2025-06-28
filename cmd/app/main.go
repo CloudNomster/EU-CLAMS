@@ -52,12 +52,12 @@ func main() { // Define command-line flags
 	log.Info("EU-CLAMS starting...")
 	// Load configuration using the centralized manager
 	configManager := config.NewManager()
-
 	// Set up command-line overrides
 	overrides := config.CommandLineOverrides{
 		ConfigPath:          configPath,
 		PlayerName:          playerName,
 		TeamName:            teamName,
+		ChatLogPath:         logPath,
 		EnableScreenshots:   enableScreenshots,
 		ScreenshotDirectory: screenshotDir,
 		GameWindowTitle:     gameWindow,
@@ -87,24 +87,26 @@ func main() { // Define command-line flags
 	log.Info("Screenshot capture: %v", cfg.EnableScreenshots)
 	log.Info("Screenshot directory: %s", cfg.ScreenshotDirectory)
 	log.Info("Game window title: %s", cfg.GameWindowTitle)
-
 	// Use command-line interface if explicitly requested or if certain flags are set
 	if *useCLI || *showStats || *importLog || *monitor {
 		log.Info("Starting in CLI mode")
 		// Continue with CLI mode
-		// Determine log file path
-		chatLogPath := *logPath
+		// Determine log file path from config, command line, or auto-detection
+		chatLogPath := cfg.ChatLogPath
 		if chatLogPath == "" {
-			// Try to use default path if not specified
+			// Try to use default path if not specified in config
 			defaultPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
 			if _, err := os.Stat(defaultPath); err == nil {
 				chatLogPath = defaultPath
 				log.Info("Using default chat log path: %s", chatLogPath)
 			} else {
-				log.Error("No chat log path specified. Use -log flag.")
+				log.Error("No chat log path specified in config or command line, and default path not found. Use -log flag or add chat_log_path to config.yaml")
 				fmt.Println("Usage: eu-tool -log <path-to-chat.log> -player <your-character-name> [-team <your-team-name>]")
+				fmt.Println("Or add 'chat_log_path: <path>' to your config.yaml file")
 				os.Exit(1)
 			}
+		} else {
+			log.Info("Using chat log path from config: %s", chatLogPath)
 		}
 
 		// Initialize data processor service

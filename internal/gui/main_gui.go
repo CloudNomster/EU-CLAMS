@@ -37,11 +37,11 @@ type MainGUI struct {
 	statusLabel   *widget.Label
 	monitorButton *widget.Button
 	infoLabel     *widget.Label
-
 	// Configuration form fields (for updating when config changes)
 	playerNameEntry        *widget.Entry
 	teamNameEntry          *widget.Entry
 	dbPathEntry            *widget.Entry
+	chatLogPathEntry       *widget.Entry
 	enableScreenshotsCheck *widget.Check
 	screenshotDirEntry     *widget.Entry
 	screenshotDelayEntry   *widget.Entry
@@ -197,23 +197,27 @@ func (g *MainGUI) startMonitoring() {
 		return
 	}
 
-	// Determine chat log path
-	chatLogPath := ""
-	defaultPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
-	if _, err := os.Stat(defaultPath); err == nil {
-		chatLogPath = defaultPath
-		g.log.Info("Using default chat log path: %s", chatLogPath)
-	} else {
-		// Show dialog to select chat log
-		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
-			if err != nil || uri == nil {
-				dialog.ShowError(fmt.Errorf("chat log file is required"), g.mainWindow)
-				return
-			}
-			chatLogPath = uri.URI().Path()
-			g.startMonitoringWithPath(chatLogPath)
-		}, g.mainWindow)
-		return
+	// Determine chat log path from config or fallback to default/dialog
+	chatLogPath := g.config.ChatLogPath
+	if chatLogPath == "" {
+		// Try default path if not configured
+		defaultPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
+		if _, err := os.Stat(defaultPath); err == nil {
+			chatLogPath = defaultPath
+			g.log.Info("Using default chat log path: %s", chatLogPath)
+		} else {
+			// Show dialog to select chat log
+			dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
+				if err != nil || uri == nil {
+					dialog.ShowError(fmt.Errorf("chat log file is required"), g.mainWindow)
+					return
+				}
+				chatLogPath = uri.URI().Path()
+				g.startMonitoringWithPath(chatLogPath)
+			}, g.mainWindow)
+			return
+		}	} else {
+		g.log.Info("Using chat log path from config: %s", chatLogPath)
 	}
 
 	g.startMonitoringWithPath(chatLogPath)
@@ -449,16 +453,19 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 	g.teamNameEntry = widget.NewEntry()
 	g.teamNameEntry.SetText(g.config.TeamName)
 	g.teamNameEntry.SetPlaceHolder("Enter your team name (optional)")
-
 	g.dbPathEntry = widget.NewEntry()
 	g.dbPathEntry.SetText(g.config.DatabasePath)
 	g.dbPathEntry.SetPlaceHolder("Path to database file")
 
-	chatLogPathEntry := widget.NewEntry()
-	chatLogPathEntry.SetPlaceHolder("Path to EU chat log file")
-	defaultChatLogPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
-	if _, err := os.Stat(defaultChatLogPath); err == nil {
-		chatLogPathEntry.SetText(defaultChatLogPath)
+	g.chatLogPathEntry = widget.NewEntry()
+	g.chatLogPathEntry.SetText(g.config.ChatLogPath)
+	g.chatLogPathEntry.SetPlaceHolder("Path to EU chat log file")
+	// Set default if config value is empty and default exists
+	if g.config.ChatLogPath == "" {
+		defaultChatLogPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
+		if _, err := os.Stat(defaultChatLogPath); err == nil {
+			g.chatLogPathEntry.SetText(defaultChatLogPath)
+		}
 	}
 	// Create screenshot related fields
 	g.enableScreenshotsCheck = widget.NewCheck("", nil)
@@ -490,13 +497,12 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			g.dbPathEntry.SetText(uri.URI().Path())
 		}, g.mainWindow)
 	})
-
 	chatLogPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
 		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
 			if err != nil || uri == nil {
 				return
 			}
-			chatLogPathEntry.SetText(uri.URI().Path())
+			g.chatLogPathEntry.SetText(uri.URI().Path())
 		}, g.mainWindow)
 	})
 
@@ -507,9 +513,10 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			}
 			g.screenshotDirEntry.SetText(uri.Path())
 		}, g.mainWindow)
-	}) // Create containers with browse buttons
+	})
+	// Create containers with browse buttons
 	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, g.dbPathEntry)
-	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, chatLogPathEntry)
+	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, g.chatLogPathEntry)
 	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, g.screenshotDirEntry)
 	// Create form
 	form := &widget.Form{
@@ -524,11 +531,12 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			{Text: "Game Window Title", Widget: g.gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
 			{Text: "Enable Web Server", Widget: g.enableWebServerCheck, HintText: "Start a web server to view statistics"},
 			{Text: "Web Server Port", Widget: g.webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
-		},
-		OnSubmit: func() { // Update configuration values from form fields
+		},		OnSubmit: func() {
+			// Update configuration values from form fields
 			g.config.PlayerName = g.playerNameEntry.Text
 			g.config.TeamName = g.teamNameEntry.Text
 			g.config.DatabasePath = g.dbPathEntry.Text
+			g.config.ChatLogPath = g.chatLogPathEntry.Text
 			g.config.EnableScreenshots = g.enableScreenshotsCheck.Checked
 			g.config.ScreenshotDirectory = g.screenshotDirEntry.Text
 			g.config.GameWindowTitle = g.gameWindowTitleEntry.Text
@@ -916,6 +924,9 @@ func (g *MainGUI) updateConfigFormFields() {
 	}
 	if g.dbPathEntry != nil {
 		g.dbPathEntry.SetText(g.config.DatabasePath)
+	}
+	if g.chatLogPathEntry != nil {
+		g.chatLogPathEntry.SetText(g.config.ChatLogPath)
 	}
 	if g.enableScreenshotsCheck != nil {
 		g.enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)

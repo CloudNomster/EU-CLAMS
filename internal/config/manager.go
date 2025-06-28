@@ -13,6 +13,7 @@ type CommandLineOverrides struct {
 	ConfigPath          *string
 	PlayerName          *string
 	TeamName            *string
+	ChatLogPath         *string
 	EnableScreenshots   *bool
 	ScreenshotDirectory *string
 	GameWindowTitle     *string
@@ -94,6 +95,9 @@ func (m *Manager) applyOverrides() {
 	}
 	if m.overrides.TeamName != nil && *m.overrides.TeamName != "" {
 		m.config.TeamName = *m.overrides.TeamName
+	}
+	if m.overrides.ChatLogPath != nil && *m.overrides.ChatLogPath != "" {
+		m.config.ChatLogPath = *m.overrides.ChatLogPath
 	}
 	if m.overrides.EnableScreenshots != nil {
 		m.config.EnableScreenshots = *m.overrides.EnableScreenshots
