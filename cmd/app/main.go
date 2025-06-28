@@ -49,64 +49,43 @@ func main() { // Define command-line flags
 		log = logger.NewWithDebug()
 		log.Debug("Debug logging enabled")
 	}
-
 	log.Info("EU-CLAMS starting...")
-	// Load configuration
-	var cfg config.Config
-	var actualConfigPath string
+	// Load configuration using the centralized manager
+	configManager := config.NewManager()
 
-	if *configPath != "" {
-		var err error
-		actualConfigPath = *configPath
-		log.Info("Loading configuration from: %s", actualConfigPath)
-		cfg, err = config.LoadConfigFromFile(actualConfigPath)
-		if err != nil {
-			log.Error("Failed to load config: %v", err)
-			os.Exit(1)
-		}
-	} else {
-		// Check for config.yaml in current directory
-		defaultConfigPath := "config.yaml"
-		if _, err := os.Stat(defaultConfigPath); err == nil {
-			actualConfigPath = defaultConfigPath
-			log.Info("Loading configuration from: %s", actualConfigPath)
-			cfg, err = config.LoadConfigFromFile(actualConfigPath)
-			if err != nil {
-				log.Error("Failed to load config: %v", err)
-				os.Exit(1)
-			}
-		} else {
-			// Use default configuration
-			log.Info("No configuration file found, using default configuration")
-			cfg = config.NewDefaultConfig()
-			actualConfigPath = "config.yaml" // Default path for saving
-		}
-
-		// Ensure database path is absolute
-		if !filepath.IsAbs(cfg.DatabasePath) {
-			cfg.DatabasePath = filepath.Join(filepath.Dir(os.Args[0]), cfg.DatabasePath)
-		}
+	// Set up command-line overrides
+	overrides := config.CommandLineOverrides{
+		ConfigPath:          configPath,
+		PlayerName:          playerName,
+		TeamName:            teamName,
+		EnableScreenshots:   enableScreenshots,
+		ScreenshotDirectory: screenshotDir,
+		GameWindowTitle:     gameWindow,
+		EnableWebServer:     webServer,
+		WebServerPort:       webPort,
 	}
+
+	// Load config with overrides
+	cfg, err := configManager.LoadConfig(*configPath, overrides)
+	if err != nil {
+		log.Error("Failed to load configuration: %v", err)
+		os.Exit(1)
+	}
+
+	actualConfigPath := configManager.GetConfigPath()
+	log.Info("Configuration loaded from: %s", actualConfigPath)
 
 	log.Info("App: %s v%s", cfg.AppName, version)
 
-	// Override player/team names from command line if provided
-	if *playerName != "" {
-		cfg.PlayerName = *playerName
-		log.Info("Using player name from command line: %s", cfg.PlayerName)
+	// Log effective configuration
+	if cfg.PlayerName != "" {
+		log.Info("Player name: %s", cfg.PlayerName)
 	}
-	if *teamName != "" {
-		cfg.TeamName = *teamName
-		log.Info("Using team name from command line: %s", cfg.TeamName)
+	if cfg.TeamName != "" {
+		log.Info("Team name: %s", cfg.TeamName)
 	}
-
-	// Override screenshot settings from command line
-	cfg.EnableScreenshots = *enableScreenshots
 	log.Info("Screenshot capture: %v", cfg.EnableScreenshots)
-	cfg.ScreenshotDirectory = *screenshotDir
 	log.Info("Screenshot directory: %s", cfg.ScreenshotDirectory)
-
-	cfg.GameWindowTitle = *gameWindow
 	log.Info("Game window title: %s", cfg.GameWindowTitle)
 
 	// Use command-line interface if explicitly requested or if certain flags are set
@@ -218,14 +197,14 @@ func main() { // Define command-line flags
 	}
 	// By default, launch the GUI mode
 	log.Info("Starting in GUI mode")
-
 	// If web server was started via command line flag, don't let GUI start it again
 	if *webServer {
 		// Override the config setting to prevent GUI from starting another web server
 		cfg.EnableWebServer = false
 		log.Info("Web server already started via command line, disabling automatic start in GUI")
 	}
+
 	mainGUI := gui.NewMainGUI(log, cfg)
-	mainGUI.SetConfigPath(actualConfigPath)
+	mainGUI.SetConfigManager(configManager)
 	mainGUI.Show()
 }
