@@ -4,9 +4,6 @@ on:
   push:
     tags:
       - 'v*.*.*'
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
 
 jobs:
   build-and-release:
@@ -31,6 +28,13 @@ jobs:
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev gcc-mingw-w64-x86-64 gcc-mingw-w64 zip
           go mod download
         
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          # Extract version from tag
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          
       - name: Build for Windows
         env:
           CGO_ENABLED: 1
@@ -40,7 +44,7 @@ jobs:
         run: |
           # Cross-compile for Windows
           go build -o eu-clams.exe ./cmd/app
-          
+
       - name: Create release ZIP file
         run: |
           zip -r eu-clams-${{ steps.get_version.outputs.VERSION }}.zip eu-clams.exe templates/
