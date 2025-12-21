@@ -24,24 +24,34 @@ import (
 
 // MainGUI is the main application GUI
 type MainGUI struct {
-	app         fyne.App
-	mainWindow  fyne.Window
-	config      config.Config
-	log         *logger.Logger
-	dataService *service.DataProcessorService
-	webService  *service.WebService // Track the web service instance
+	app           fyne.App
+	mainWindow    fyne.Window
+	config        config.Config
+	log           *logger.Logger
+	dataService   *service.DataProcessorService
+	webService    *service.WebService // Track the web service instance
+	configManager *config.Manager     // Centralized config manager
 
 	// Status variables
 	isMonitoring  bool
 	statusLabel   *widget.Label
 	monitorButton *widget.Button
 	infoLabel     *widget.Label
+	// Configuration form fields (for updating when config changes)
+	playerNameEntry        *widget.Entry
+	teamNameEntry          *widget.Entry
+	dbPathEntry            *widget.Entry
+	chatLogPathEntry       *widget.Entry
+	enableScreenshotsCheck *widget.Check
+	screenshotDirEntry     *widget.Entry
+	screenshotDelayEntry   *widget.Entry
+	gameWindowTitleEntry   *widget.Entry
+	enableWebServerCheck   *widget.Check
+	webServerPortEntry     *widget.Entry
 
 	// Configuration reloading
-	configPath     string
-	reloadTicker   *time.Ticker
-	stopReload     chan bool
-	lastConfigHash string
+	reloadTicker *time.Ticker
+	stopReload   chan bool
 }
 
 // NewMainGUI creates a new main GUI
@@ -55,7 +65,6 @@ func NewMainGUI(log *logger.Logger, cfg config.Config) *MainGUI {
 		config:       cfg,
 		log:          log,
 		isMonitoring: false,
-		configPath:   "config.yaml", // Default config path
 		stopReload:   make(chan bool),
 	}
 
@@ -188,23 +197,28 @@ func (g *MainGUI) startMonitoring() {
 		return
 	}
 
-	// Determine chat log path
-	chatLogPath := ""
-	defaultPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
-	if _, err := os.Stat(defaultPath); err == nil {
-		chatLogPath = defaultPath
-		g.log.Info("Using default chat log path: %s", chatLogPath)
+	// Determine chat log path from config or fallback to default/dialog
+	chatLogPath := g.config.ChatLogPath
+	if chatLogPath == "" {
+		// Try default path if not configured
+		defaultPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
+		if _, err := os.Stat(defaultPath); err == nil {
+			chatLogPath = defaultPath
+			g.log.Info("Using default chat log path: %s", chatLogPath)
+		} else {
+			// Show dialog to select chat log
+			dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
+				if err != nil || uri == nil {
+					dialog.ShowError(fmt.Errorf("chat log file is required"), g.mainWindow)
+					return
+				}
+				chatLogPath = uri.URI().Path()
+				g.startMonitoringWithPath(chatLogPath)
+			}, g.mainWindow)
+			return
+		}
 	} else {
-		// Show dialog to select chat log
-		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
-			if err != nil || uri == nil {
-				dialog.ShowError(fmt.Errorf("chat log file is required"), g.mainWindow)
-				return
-			}
-			chatLogPath = uri.URI().Path()
-			g.startMonitoringWithPath(chatLogPath)
-		}, g.mainWindow)
-		return
+		g.log.Info("Using chat log path from config: %s", chatLogPath)
 	}
 
 	g.startMonitoringWithPath(chatLogPath)
@@ -432,65 +446,64 @@ func hasCommand(name string) bool {
 
 // createConfigTab creates the content for the configuration tab
 func (g *MainGUI) createConfigTab() fyne.CanvasObject {
-	// Create form fields
-	playerNameEntry := widget.NewEntry()
-	playerNameEntry.SetText(g.config.PlayerName)
-	playerNameEntry.SetPlaceHolder("Enter your character name")
+	// Create form fields and store references
+	g.playerNameEntry = widget.NewEntry()
+	g.playerNameEntry.SetText(g.config.PlayerName)
+	g.playerNameEntry.SetPlaceHolder("Enter your character name")
 
-	teamNameEntry := widget.NewEntry()
-	teamNameEntry.SetText(g.config.TeamName)
-	teamNameEntry.SetPlaceHolder("Enter your team name (optional)")
+	g.teamNameEntry = widget.NewEntry()
+	g.teamNameEntry.SetText(g.config.TeamName)
+	g.teamNameEntry.SetPlaceHolder("Enter your team name (optional)")
+	g.dbPathEntry = widget.NewEntry()
+	g.dbPathEntry.SetText(g.config.DatabasePath)
+	g.dbPathEntry.SetPlaceHolder("Path to database file")
 
-	dbPathEntry := widget.NewEntry()
-	dbPathEntry.SetText(g.config.DatabasePath)
-	dbPathEntry.SetPlaceHolder("Path to database file")
-
-	chatLogPathEntry := widget.NewEntry()
-	chatLogPathEntry.SetPlaceHolder("Path to EU chat log file")
-	defaultChatLogPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
-	if _, err := os.Stat(defaultChatLogPath); err == nil {
-		chatLogPathEntry.SetText(defaultChatLogPath)
+	g.chatLogPathEntry = widget.NewEntry()
+	g.chatLogPathEntry.SetText(g.config.ChatLogPath)
+	g.chatLogPathEntry.SetPlaceHolder("Path to EU chat log file")
+	// Set default if config value is empty and default exists
+	if g.config.ChatLogPath == "" {
+		defaultChatLogPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Entropia Universe", "chat.log")
+		if _, err := os.Stat(defaultChatLogPath); err == nil {
+			g.chatLogPathEntry.SetText(defaultChatLogPath)
+		}
 	}
-
 	// Create screenshot related fields
-	enableScreenshotsCheck := widget.NewCheck("", nil)
-	enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
-	screenshotDirEntry := widget.NewEntry()
-	screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
-	screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
+	g.enableScreenshotsCheck = widget.NewCheck("", nil)
+	g.enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
+	g.screenshotDirEntry = widget.NewEntry()
+	g.screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
+	g.screenshotDirEntry.SetPlaceHolder("Path to screenshot directory")
 
-	screenshotDelayEntry := widget.NewEntry()
-	screenshotDelayEntry.SetText(fmt.Sprintf("%.1f", g.config.ScreenshotDelay))
-	screenshotDelayEntry.SetPlaceHolder("0.6")
+	g.screenshotDelayEntry = widget.NewEntry()
+	g.screenshotDelayEntry.SetText(fmt.Sprintf("%.1f", g.config.ScreenshotDelay))
+	g.screenshotDelayEntry.SetPlaceHolder("0.6")
 
-	gameWindowTitleEntry := widget.NewEntry()
-	gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
-	gameWindowTitleEntry.SetPlaceHolder("Entropia Universe Client")
-
+	g.gameWindowTitleEntry = widget.NewEntry()
+	g.gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
+	g.gameWindowTitleEntry.SetPlaceHolder("Entropia Universe Client")
 	// Create web server related fields
-	enableWebServerCheck := widget.NewCheck("", nil)
-	enableWebServerCheck.SetChecked(g.config.EnableWebServer)
+	g.enableWebServerCheck = widget.NewCheck("", nil)
+	g.enableWebServerCheck.SetChecked(g.config.EnableWebServer)
 
-	webServerPortEntry := widget.NewEntry()
-	webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
-	webServerPortEntry.SetPlaceHolder("8080")
-
+	g.webServerPortEntry = widget.NewEntry()
+	g.webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
+	g.webServerPortEntry.SetPlaceHolder("8080")
 	// Create buttons for file selection
 	dbPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
 		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
 			if err != nil || uri == nil {
 				return
 			}
-			dbPathEntry.SetText(uri.URI().Path())
+			g.dbPathEntry.SetText(uri.URI().Path())
 		}, g.mainWindow)
 	})
-
 	chatLogPathButton := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
 		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
 			if err != nil || uri == nil {
 				return
 			}
-			chatLogPathEntry.SetText(uri.URI().Path())
+			g.chatLogPathEntry.SetText(uri.URI().Path())
 		}, g.mainWindow)
 	})
 
@@ -499,56 +512,57 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 			if err != nil || uri == nil {
 				return
 			}
-			screenshotDirEntry.SetText(uri.Path())
+			g.screenshotDirEntry.SetText(uri.Path())
 		}, g.mainWindow)
 	})
 	// Create containers with browse buttons
-	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, dbPathEntry)
-	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, chatLogPathEntry)
-	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, screenshotDirEntry)
-
+	dbPathContainer := container.NewBorder(nil, nil, nil, dbPathButton, g.dbPathEntry)
+	chatLogPathContainer := container.NewBorder(nil, nil, nil, chatLogPathButton, g.chatLogPathEntry)
+	screenshotDirContainer := container.NewBorder(nil, nil, nil, screenshotDirButton, g.screenshotDirEntry)
 	// Create form
 	form := &widget.Form{
 		Items: []*widget.FormItem{
-			{Text: "Player Name", Widget: playerNameEntry, HintText: "Your character name in Entropia Universe"},
-			{Text: "Team Name", Widget: teamNameEntry, HintText: "Your team name (optional)"},
+			{Text: "Player Name", Widget: g.playerNameEntry, HintText: "Your character name in Entropia Universe"},
+			{Text: "Team Name", Widget: g.teamNameEntry, HintText: "Your team name (optional)"},
 			{Text: "Database Path", Widget: dbPathContainer, HintText: "Where to store your globals database"},
 			{Text: "Chat Log Path", Widget: chatLogPathContainer, HintText: "Path to Entropia Universe chat.log"},
-			{Text: "Enable Screenshots", Widget: enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
+			{Text: "Enable Screenshots", Widget: g.enableScreenshotsCheck, HintText: "Take screenshots for globals and HoFs"},
 			{Text: "Screenshot Directory", Widget: screenshotDirContainer, HintText: "Where to save screenshots"},
-			{Text: "Screenshot Delay", Widget: screenshotDelayEntry, HintText: "Delay in seconds before taking a screenshot (default: 0.6)"},
-			{Text: "Game Window Title", Widget: gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
-			{Text: "Enable Web Server", Widget: enableWebServerCheck, HintText: "Start a web server to view statistics"}, {Text: "Web Server Port", Widget: webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
-		},
-		OnSubmit: func() {
+			{Text: "Screenshot Delay", Widget: g.screenshotDelayEntry, HintText: "Delay in seconds before taking a screenshot (default: 0.6)"},
+			{Text: "Game Window Title", Widget: g.gameWindowTitleEntry, HintText: "Beginning of Entropia Universe window title"},
+			{Text: "Enable Web Server", Widget: g.enableWebServerCheck, HintText: "Start a web server to view statistics"},
+			{Text: "Web Server Port", Widget: g.webServerPortEntry, HintText: "Port for the web server (default: 8080)"},
+		}, OnSubmit: func() {
 			// Update configuration values from form fields
-			g.config.PlayerName = playerNameEntry.Text
-			g.config.TeamName = teamNameEntry.Text
-			g.config.DatabasePath = dbPathEntry.Text
-			g.config.EnableScreenshots = enableScreenshotsCheck.Checked
-			g.config.ScreenshotDirectory = screenshotDirEntry.Text
-			g.config.GameWindowTitle = gameWindowTitleEntry.Text
-			g.config.EnableWebServer = enableWebServerCheck.Checked
+			g.config.PlayerName = g.playerNameEntry.Text
+			g.config.TeamName = g.teamNameEntry.Text
+			g.config.DatabasePath = g.dbPathEntry.Text
+			g.config.ChatLogPath = g.chatLogPathEntry.Text
+			g.config.EnableScreenshots = g.enableScreenshotsCheck.Checked
+			g.config.ScreenshotDirectory = g.screenshotDirEntry.Text
+			g.config.GameWindowTitle = g.gameWindowTitleEntry.Text
+			g.config.EnableWebServer = g.enableWebServerCheck.Checked
 
 			// Convert screenshot delay from string to float64
 			screenshotDelay := 0.6 // Default delay
-			if delay, err := strconv.ParseFloat(screenshotDelayEntry.Text, 64); err == nil && delay >= 0 {
+			if delay, err := strconv.ParseFloat(g.screenshotDelayEntry.Text, 64); err == nil && delay >= 0 {
 				screenshotDelay = delay
-			} else if screenshotDelayEntry.Text != "" {
+			} else if g.screenshotDelayEntry.Text != "" {
 				dialog.ShowError(fmt.Errorf("invalid screenshot delay: must be a positive number"), g.mainWindow)
 				return
 			}
 			g.config.ScreenshotDelay = screenshotDelay
-
 			// Convert web server port from string to int
 			webServerPort := 8080 // Default port
-			if port, err := strconv.Atoi(webServerPortEntry.Text); err == nil && port > 0 {
+			if port, err := strconv.Atoi(g.webServerPortEntry.Text); err == nil && port > 0 {
 				webServerPort = port
-			} else if webServerPortEntry.Text != "" {
+			} else if g.webServerPortEntry.Text != "" {
 				dialog.ShowError(fmt.Errorf("invalid web server port: must be a positive number"), g.mainWindow)
 				return
 			}
-			g.config.WebServerPort = webServerPort // Save to file
+			g.config.WebServerPort = webServerPort
+
+			// Save to file
 			err := g.config.SaveConfigToFile("config.yaml")
 			if err != nil {
 				dialog.ShowError(err, g.mainWindow)
@@ -558,8 +572,10 @@ func (g *MainGUI) createConfigTab() fyne.CanvasObject {
 
 			g.log.Info("Configuration saved successfully")
 
-			// Update the config file hash to prevent auto-reload from triggering immediately
-			g.lastConfigHash = g.getConfigFileHash()
+			// Update the config manager with the new config
+			if g.configManager != nil {
+				g.configManager.UpdateConfig(g.config, false) // Don't save again, we just saved
+			}
 
 			// Update UI components immediately
 			g.updateUIFromConfig()
@@ -788,27 +804,31 @@ func (g *MainGUI) Close() {
 	g.log.Info("Application closing")
 }
 
-// SetConfigPath sets the path to the configuration file for auto-reloading
-func (g *MainGUI) SetConfigPath(path string) {
-	g.configPath = path
+// SetConfigManager sets the configuration manager for the GUI
+func (g *MainGUI) SetConfigManager(manager *config.Manager) {
+	g.configManager = manager
 }
 
 // startConfigReloading starts the automatic configuration reloading timer
 func (g *MainGUI) startConfigReloading() {
+	if g.configManager == nil {
+		return
+	}
+
 	if g.reloadTicker != nil {
 		g.reloadTicker.Stop()
 	}
-
 	g.reloadTicker = time.NewTicker(3 * time.Second)
-	g.lastConfigHash = g.getConfigFileHash()
 
 	go func() {
+		ticker := g.reloadTicker // Store local reference to avoid race condition
+		defer ticker.Stop()      // Ensure ticker is always stopped when goroutine exits
+
 		for {
 			select {
-			case <-g.reloadTicker.C:
+			case <-ticker.C:
 				g.checkAndReloadConfig()
 			case <-g.stopReload:
-				g.reloadTicker.Stop()
 				return
 			}
 		}
@@ -824,44 +844,48 @@ func (g *MainGUI) stopConfigReloading() {
 		g.reloadTicker = nil
 	}
 
+	// Send stop signal to goroutine (non-blocking)
 	select {
 	case g.stopReload <- true:
 	default:
+		// Channel might be full or goroutine already stopped, that's ok
 	}
-}
-
-// getConfigFileHash returns a simple hash of the config file to detect changes
-func (g *MainGUI) getConfigFileHash() string {
-	if g.configPath == "" {
-		return ""
-	}
-
-	info, err := os.Stat(g.configPath)
-	if err != nil {
-		return ""
-	}
-
-	// Use modification time and size as a simple hash
-	return fmt.Sprintf("%d_%d", info.ModTime().Unix(), info.Size())
 }
 
 // checkAndReloadConfig checks if the config file has changed and reloads it
 func (g *MainGUI) checkAndReloadConfig() {
-	currentHash := g.getConfigFileHash()
-	if currentHash != "" && currentHash != g.lastConfigHash {
+	if g.configManager == nil {
+		return
+	}
+
+	newConfig, changed, err := g.configManager.ReloadConfig()
+	if err != nil {
+		g.log.Error("Failed to check configuration changes: %v", err)
+		return
+	}
+
+	if changed {
 		g.log.Info("Configuration file changed, reloading...")
-		g.reloadConfig()
-		g.lastConfigHash = currentHash
+		oldConfig := g.config
+		g.config = newConfig
+
+		// Update GUI components on the UI thread
+		fyne.Do(func() {
+			g.updateUIFromConfig()
+			g.updateServicesFromConfig(oldConfig)
+		})
+
+		g.log.Info("Configuration reloaded successfully")
 	}
 }
 
 // reloadConfig reloads the configuration from file and updates the GUI
 func (g *MainGUI) reloadConfig() {
-	if g.configPath == "" {
+	if g.configManager == nil {
 		return
 	}
 
-	newConfig, err := config.LoadConfigFromFile(g.configPath)
+	newConfig, _, err := g.configManager.ReloadConfig()
 	if err != nil {
 		g.log.Error("Failed to reload configuration: %v", err)
 		return
@@ -888,6 +912,43 @@ func (g *MainGUI) updateUIFromConfig() {
 			valueOrEmpty(g.config.PlayerName, "Not set"),
 			valueOrEmpty(g.config.TeamName, "Not set"))
 		g.infoLabel.SetText(infoText)
+	}
+
+	// Update config form fields if they exist
+	g.updateConfigFormFields()
+}
+
+// updateConfigFormFields updates the configuration form fields with current config values
+func (g *MainGUI) updateConfigFormFields() {
+	if g.playerNameEntry != nil {
+		g.playerNameEntry.SetText(g.config.PlayerName)
+	}
+	if g.teamNameEntry != nil {
+		g.teamNameEntry.SetText(g.config.TeamName)
+	}
+	if g.dbPathEntry != nil {
+		g.dbPathEntry.SetText(g.config.DatabasePath)
+	}
+	if g.chatLogPathEntry != nil {
+		g.chatLogPathEntry.SetText(g.config.ChatLogPath)
+	}
+	if g.enableScreenshotsCheck != nil {
+		g.enableScreenshotsCheck.SetChecked(g.config.EnableScreenshots)
+	}
+	if g.screenshotDirEntry != nil {
+		g.screenshotDirEntry.SetText(g.config.ScreenshotDirectory)
+	}
+	if g.screenshotDelayEntry != nil {
+		g.screenshotDelayEntry.SetText(fmt.Sprintf("%.1f", g.config.ScreenshotDelay))
+	}
+	if g.gameWindowTitleEntry != nil {
+		g.gameWindowTitleEntry.SetText(g.config.GameWindowTitle)
+	}
+	if g.enableWebServerCheck != nil {
+		g.enableWebServerCheck.SetChecked(g.config.EnableWebServer)
+	}
+	if g.webServerPortEntry != nil {
+		g.webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
 	}
 }
 
@@ -922,7 +983,7 @@ func (g *MainGUI) updateServicesFromConfig(oldConfig config.Config) {
 	}
 }
 
-// ForceReloadConfig manually forces a configuration reload (useful for testing or debugging)
+// ForceReloadConfig manually triggers a configuration reload (useful for testing or debugging)
 func (g *MainGUI) ForceReloadConfig() {
 	g.log.Info("Manually triggering configuration reload...")
 	g.reloadConfig()

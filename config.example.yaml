@@ -3,6 +3,7 @@ app_name: EU-CLAMS
 database_path: ./data/db.yaml
 player_name: YourCharacterName
 team_name: YourTeamName
+chat_log_path: C:\Users\YourUser\Documents\Entropia Universe\chat.log
 enable_screenshots: true
 screenshot_directory: ./data/screenshots
 screenshot_delay: 0.6
