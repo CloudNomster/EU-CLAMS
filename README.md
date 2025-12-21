@@ -1,5 +1,6 @@
 # EU-CLAMS
 
+This is a Work in progress, run at your own risk.
 This is a Go-based tool for tracking and analyzing Entropia Universe global events. It monitors your chat log in real-time, capturing information about globals, Hall of Fame entries, and other significant events.
 
 ## Features
@@ -10,10 +11,15 @@ This is a Go-based tool for tracking and analyzing Entropia Universe global even
   - Kill globals (player and team)
   - Crafting globals
   - Mining/deposit finds
+  - Rare finds
 - Hall of Fame (HoF) detection
 - Automatic screenshots of globals and HoFs
-- Detailed statistics and analysis
-- Web server for viewing statistics in a browser
+- Detailed statistics and analysis (WiP)
+- Web server for viewing statistics in a browser (WiP)
+
+## Missing a feature?
+
+If you would like to see some specific feature or change to the app I suggest to create an issue on Github.
 
 ## Project Structure
 
@@ -31,12 +37,15 @@ This is a Go-based tool for tracking and analyzing Entropia Universe global even
 
 ### Installation
 
-1. Clone the repository
-2. Install prerequisites:
-   - For GUI mode: Install MinGW-w64 or TDM-GCC for Windows (download from https://jmeubank.github.io/tdm-gcc/)
-3. Build the application:
-   - Using the build script: `build.bat`
-   - Manual build: `go build -o eu-clams.exe ./cmd/app`
+Windows:
+
+1. Download from Releases
+2. Extract to a folder
+3. Run the .exe
+
+Linux:
+There is a binary download coming.
+For now you can clone the repo and build it with GO.
 
 ### Configuration
 
@@ -48,6 +57,7 @@ Configuration can be provided in three ways:
    ```
 
 2. Configuration file (automatically loaded if present):
+   - You can configure it through the GUI, no need for config file editing.
    - Copy `config.example.yaml` to `config.yaml` and edit as needed
    - The application will automatically load `config.yaml` from the current directory
    ```yaml
@@ -63,7 +73,7 @@ Configuration can be provided in three ways:
    web_server_port: 8080
    ```
 
-3. GUI Configuration Dialog (when using GUI mode):
+4. GUI Configuration Dialog (when using GUI mode):
    - Launch the application: `eu-clams`
    - Click the "Configure" button to open the configuration dialog
    - Enter your settings and click "Save Configuration"
@@ -133,7 +143,7 @@ eu-clams -cli -import -player "YourCharacterName" -team "YourTeamName"
 ```bash
 eu-clams -cli -stats -player "YourCharacterName"
 ```
-Displays comprehensive statistics about your globals:
+Displays comprehensive statistics about your globals: (WiP)
 - Total globals and HoFs
 - Total PED value
 - Highest value global
@@ -143,7 +153,7 @@ Displays comprehensive statistics about your globals:
 - Time-based analysis
 - Last update timestamp
 
-##### d. Web Server View
+##### d. Web Server View (WiP)
 ```bash
 eu-clams -cli -web -player "YourCharacterName" -web-port 8080
 ```
@@ -199,7 +209,7 @@ To configure screenshots:
 When a global or Hall of Fame event is detected:
 1. The app checks if screenshots are enabled
 2. It looks for a window with the specified title ("Entropia Universe Client" by default)
-3. It takes a screenshot of that window
+3. It takes a screenshot of that window. On Linux the window must be visible.
 4. The screenshot is saved to the configured directory with a filename that includes:
    - Event type (global or HoF)
    - Global type (kill, craft, etc.)
