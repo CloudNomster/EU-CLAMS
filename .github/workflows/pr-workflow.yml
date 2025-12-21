@@ -11,7 +11,8 @@ on:
 jobs:
   test-and-build:
     name: Run Tests and Build
-    runs-on: nomsterrunner  # Using the specified self-hosted Linux runner
+    #runs-on: nomsterrunner  # Using the specified self-hosted Linux runner
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
