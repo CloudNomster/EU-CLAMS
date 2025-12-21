@@ -32,6 +32,7 @@ type EntropyDB struct {
 	TeamName          string        `yaml:"team_name,omitempty"`
 	LastProcessed     time.Time     `yaml:"last_processed,omitempty"`
 	LastProcessedSize int64         `yaml:"last_processed_size,omitempty"`
+	LastLogPath       string        `yaml:"last_log_path,omitempty"` // Path of the last processed log file
 	dirty             bool          // Indicates if the database has unsaved changes
 }
 
@@ -46,16 +47,19 @@ func NewEntropyDB(playerName string, teamName string) *EntropyDB {
 
 // regular expressions for parsing different types of global messages
 var ( // For team kills - handle both literal quotes and HTML entities
-	teamKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*Team\s*(?:"([^"]+)"|&quot;([^&]*?)&quot;)\s*killed\s*a\s*creature\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+	teamKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*Team\s*(?:"([^"]+)"|&quot;(.*?)&quot;)\s*killed\s*a\s*creature\s*\((.+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*(PED|PEC)(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 
 	// For individual kills
-	playerKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*(?:as|has|have)?\s*killed\s*a\s*creature\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+	playerKillRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*(?:as|has|have)?\s*killed\s*a\s*creature\s*\((.+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*(PED|PEC)(?:\s*at\s*([^!]+))?(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 
 	// For crafting
-	craftRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*constructed\s*an\s*item\s*\(([^)]+)\)\s*worth\s*(\d+)\s*PED(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+	craftRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*constructed\s*an\s*item\s*\((.+)\)\s*worth\s*(\d+)\s*(PED|PEC)(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 
 	// For mining/deposits - handle both literal quotes and HTML entities
-	findRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*(?:Team\s*(?:"([^"]+)"|&quot;([^&]*?)&quot;)|([^\s]+(?:\s+[^\s]+){0,3}))\s*found\s*a\s*deposit\s*\(([^)]+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*PED(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+	findRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*(?:Team\s*(?:"([^"]+)"|&quot;(.*?)&quot;)|([^\s]+(?:\s+[^\s]+){0,3}))\s*found\s*a\s*deposit\s*\((.+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*(PED|PEC)(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
+
+	// For rare items
+	rareItemRegex = regexp.MustCompile(`\[\s*Globals\s*\]\s*\[\s*\]\s*([^\s]+(?:\s+[^\s]+){0,3})\s*(?:as|has|have)?\s*found\s*a\s*rare\s*item\s*\((.+)\)\s*with\s*a\s*value\s*of\s*(\d+)\s*(PED|PEC)(!)?(?:\s*A\s*record\s*has\s*been\s*added\s*to\s*the\s*Hall\s*of\s*Fame!)?`)
 )
 
 // ParseChatLine parses a single line from the chat log and returns a GlobalEntry if it's a global message
@@ -91,9 +95,9 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 		// Decode HTML entities in team name (e.g., &quot; becomes ")
 		entry.TeamName = html.UnescapeString(teamName)
 		entry.Target = matches[3]
-		entry.Value = parseValue(matches[4])
-		if len(matches) > 5 && matches[5] != "" {
-			entry.Location = strings.TrimSpace(matches[5])
+		entry.Value = parseValue(matches[4], matches[5])
+		if len(matches) > 6 && matches[6] != "" {
+			entry.Location = strings.TrimSpace(matches[6])
 		}
 		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
@@ -104,9 +108,9 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 		entry.Type = "kill"
 		entry.PlayerName = matches[1]
 		entry.Target = matches[2]
-		entry.Value = parseValue(matches[3])
-		if len(matches) > 4 && matches[4] != "" {
-			entry.Location = strings.TrimSpace(matches[4])
+		entry.Value = parseValue(matches[3], matches[4])
+		if len(matches) > 5 && matches[5] != "" {
+			entry.Location = strings.TrimSpace(matches[5])
 		}
 		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
@@ -116,7 +120,7 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 		entry.Type = "craft"
 		entry.PlayerName = matches[1]
 		entry.Target = matches[2]
-		entry.Value = parseValue(matches[3])
+		entry.Value = parseValue(matches[3], matches[4])
 		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
 		return &entry, nil
@@ -136,7 +140,17 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 			entry.PlayerName = matches[3]
 		}
 		entry.Target = matches[4]
-		entry.Value = parseValue(matches[5])
+		entry.Value = parseValue(matches[5], matches[6])
+		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
+		entry.IsHof = strings.Contains(line, "Hall of Fame")
+		return &entry, nil
+	}
+
+	if matches := rareItemRegex.FindStringSubmatch(line); matches != nil {
+		entry.Type = "find" // Treating rare items as finds
+		entry.PlayerName = matches[1]
+		entry.Target = matches[2]
+		entry.Value = parseValue(matches[3], matches[4])
 		// Check for Hall of Fame indicator - only use the explicit "Hall of Fame" text
 		entry.IsHof = strings.Contains(line, "Hall of Fame")
 		return &entry, nil
@@ -144,7 +158,8 @@ func ParseChatLine(line string) (*GlobalEntry, error) {
 
 	// Return nil if we couldn't parse this global message
 	// It could be another type we're not handling yet
-	return nil, nil
+	// Return error if we found [Globals] but couldn't parse the message
+	return nil, fmt.Errorf("failed to parse global message: %s", line)
 }
 
 // normalizeTeamName removes surrounding quotes and normalizes team names for comparison
@@ -179,15 +194,18 @@ func teamNamesMatch(teamName1, teamName2 string) bool {
 	return strings.EqualFold(normalized1, normalized2)
 }
 
-// parseValue converts a string PED value to float64
-func parseValue(val string) float64 {
+// parseValue converts a string value to float64, handling currency (PED/PEC)
+func parseValue(val string, currency string) float64 {
 	var value float64
 	fmt.Sscanf(val, "%f", &value)
+	if currency == "PEC" {
+		value = value / 100.0
+	}
 	return value
 }
 
 // ProcessChatLogFromOffset reads a chat log file from a specific offset and extracts global messages
-func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, progressChan chan<- float64, logger *logger.Logger) (int, error) {
+func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, progressChan chan<- float64, logger *logger.Logger, onGlobal func(*GlobalEntry)) (int, error) {
 	if db == nil {
 		return 0, fmt.Errorf("database is nil")
 	}
@@ -237,14 +255,14 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 		entry, err := ParseChatLine(line)
 		if err != nil {
 			if logger != nil {
-				logger.Error("Error parsing line %d: %v\nLine content: %s", lineNum, err, line)
+				logger.Debug("Error parsing line %d: %v\nLine content: %s", lineNum, err, line)
 			}
 			continue
 		}
 		if entry != nil {
-			if logger != nil {
-				logger.Info("Line %d - Found global: Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
-					lineNum, entry.Type, entry.PlayerName, entry.TeamName, entry.Target, entry.Value)
+			// Call the callback if provided, before any filtering
+			if onGlobal != nil {
+				onGlobal(entry)
 			}
 
 			matchPlayer := db.PlayerName == "" || strings.EqualFold(entry.PlayerName, db.PlayerName)
@@ -270,9 +288,6 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 			if shouldInclude {
 				db.Globals = append(db.Globals, *entry)
 				count++
-				if logger != nil {
-					logger.Info("Added global from line %d (total: %d)", lineNum, count)
-				}
 			}
 		}
 	}
@@ -299,7 +314,7 @@ func (db *EntropyDB) ProcessChatLogFromOffset(logPath string, offset int64, prog
 
 // ProcessChatLog reads a chat log file and extracts all global messages
 // Only processes globals relevant to the player if playerName is specified
-func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64, logger *logger.Logger) (int, error) {
+func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64, logger *logger.Logger, onGlobal func(*GlobalEntry)) (int, error) {
 	if db == nil {
 		return 0, fmt.Errorf("database is nil")
 	}
@@ -347,7 +362,7 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 		entry, err := ParseChatLine(line)
 		if err != nil {
 			if logger != nil {
-				logger.Error("Error parsing line %d: %v\nLine content: %s", lineNum, err, line)
+				logger.Debug("Error parsing line %d: %v\nLine content: %s", lineNum, err, line)
 			}
 			continue
 		}
@@ -356,7 +371,13 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 			if logger != nil {
 				logger.Debug("Line %d - Found global: Type=%s, Player=%s, Team=%s, Target=%s, Value=%.2f",
 					lineNum, entry.Type, entry.PlayerName, entry.TeamName, entry.Target, entry.Value)
-			} // Include the entry if any of these are true:
+			}
+			// Call the callback if provided, before any filtering
+			if onGlobal != nil {
+				onGlobal(entry)
+			}
+
+			// Include the entry if any of these are true:
 			// 1. No player/team filtering is enabled
 			// 2. It's the player's own global
 			// 3. It's from the player's team
@@ -383,9 +404,6 @@ func (db *EntropyDB) ProcessChatLog(logPath string, progressChan chan<- float64,
 			if shouldInclude {
 				db.Globals = append(db.Globals, *entry)
 				count++
-				if logger != nil {
-					logger.Info("Added global from line %d (total: %d)", lineNum, count)
-				}
 			}
 		}
 	}

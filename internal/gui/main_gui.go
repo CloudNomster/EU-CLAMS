@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -92,6 +93,13 @@ func (g *MainGUI) Show() {
 
 	// Start configuration auto-reloading
 	g.startConfigReloading()
+
+	// Add CTRL+Q shortcut to quit
+	ctrlQ := &desktop.CustomShortcut{KeyName: fyne.KeyQ, Modifier: fyne.KeyModifierControl}
+	g.mainWindow.Canvas().AddShortcut(ctrlQ, func(shortcut fyne.Shortcut) {
+		g.log.Info("Ctrl+Q pressed, quitting...")
+		g.mainWindow.Close()
+	})
 
 	g.mainWindow.ShowAndRun()
 }

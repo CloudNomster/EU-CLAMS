@@ -127,6 +127,8 @@ eu-clams -cli -import -player "YourCharacterName" -team "YourTeamName"
 - Exits after completion
 - Useful for initial setup or catching up after being offline
 
+**Tip:** When importing multiple log files, always start with the **oldest** file and proceed chronologically to the **newest** (current) one. This ensures your global history is built correctly without gaps or duplicate processing issues.
+
 ##### c. Statistics View
 ```bash
 eu-clams -cli -stats -player "YourCharacterName"

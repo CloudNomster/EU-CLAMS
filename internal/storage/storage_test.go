@@ -98,8 +98,39 @@ func TestParseChatLine(t *testing.T) {
 			wantValue: 200,
 		},
 		{
+			name:      "Nested Parentheses in Creature Name",
+			line:      "2025-12-21 17:26:53 [Globals] [] Jeppe lillfya falk killed a creature (Mayhem Kerberos (FFA 3)) with a value of 168 PED!",
+			wantType:  "kill",
+			wantHof:   false,
+			wantValue: 168,
+		},
+		{
+			name:     "Rare Item Find with PEC",
+			line:     "2025-12-21 17:31:52 [Globals] [] franck sweetyxx MORE has found a rare item (Paneleon Droplet) with a value of 20 PEC! A record has been added to the Hall of Fame!",
+			wantType: "find", // or "rare_find"? Let's stick to "find" or maybe a new type? "loot"?
+			// The current types are kill, craft, find. "found a rare item" sounds like 'find' but maybe distinct.
+			// Let's assume 'find' for now, or maybe 'loot'.
+			// Actually, the user might expect 'find' effectively (mining is find).
+			// Let's use 'rare_item' or just 'find'. Let's use 'find' for now and see if we differentiate later.
+			// Actually, let's use a generic 'loot' or 'rare'.
+			wantHof:   true,
+			wantValue: 0.20, // 20 PEC = 0.2 PED
+		},
+		{
+			name:      "Rare Item Find with PEC - Variant 2",
+			line:      "2025-12-21 17:38:54 [Globals] [] Kamil Mrozik Strzelec has found a rare item (Stalkerbot Droplet) with a value of 20 PEC! A record has been added to the Hall of Fame!",
+			wantType:  "find",
+			wantHof:   true,
+			wantValue: 0.20,
+		},
+		{
 			name:      "Invalid timestamp",
 			line:      "Invalid-Date [Globals] [] Test Player killed a creature (Test Beast) with a value of 50 PED",
+			wantError: true,
+		},
+		{
+			name:      "Malformed Global Message",
+			line:      "2025-05-16 10:01:00 [Globals] Malformed content",
 			wantError: true,
 		},
 		{
@@ -173,7 +204,7 @@ func TestGetHofEntries(t *testing.T) {
 	}
 
 	db := NewEntropyDB("", "")
-	_, err := db.ProcessChatLog(tmpFile, nil, nil)
+	_, err := db.ProcessChatLog(tmpFile, nil, nil, nil)
 	if err != nil {
 		t.Errorf("ProcessChatLog failed: %v", err)
 		return
@@ -299,7 +330,7 @@ func TestTeamNameFiltering(t *testing.T) {
 			}
 
 			db := NewEntropyDB(tt.playerName, tt.teamName)
-			count, err := db.ProcessChatLog(tmpFile, nil, nil)
+			count, err := db.ProcessChatLog(tmpFile, nil, nil, nil)
 			if err != nil {
 				t.Errorf("ProcessChatLog failed: %v", err)
 				return
@@ -481,7 +512,7 @@ func TestProcessChatLogFromOffsetMethod(t *testing.T) {
 			}
 
 			db := NewEntropyDB(tt.playerName, tt.teamName)
-			count, err := db.ProcessChatLogFromOffset(tmpFile, 0, nil, nil)
+			count, err := db.ProcessChatLogFromOffset(tmpFile, 0, nil, nil, nil)
 			if err != nil {
 				t.Errorf("ProcessChatLogFromOffset failed: %v", err)
 				return
@@ -566,14 +597,14 @@ func TestConsistentFiltering(t *testing.T) {
 
 			// Process with both methods
 			db1 := NewEntropyDB(tt.playerName, tt.teamName)
-			count1, err1 := db1.ProcessChatLog(tmpFile, nil, nil)
+			count1, err1 := db1.ProcessChatLog(tmpFile, nil, nil, nil)
 			if err1 != nil {
 				t.Errorf("ProcessChatLog failed: %v", err1)
 				return
 			}
 
 			db2 := NewEntropyDB(tt.playerName, tt.teamName)
-			count2, err2 := db2.ProcessChatLogFromOffset(tmpFile, 0, nil, nil)
+			count2, err2 := db2.ProcessChatLogFromOffset(tmpFile, 0, nil, nil, nil)
 			if err2 != nil {
 				t.Errorf("ProcessChatLogFromOffset failed: %v", err2)
 				return
@@ -589,5 +620,122 @@ func TestConsistentFiltering(t *testing.T) {
 					len(db1.Globals), len(db2.Globals))
 			}
 		})
+	}
+}
+
+func TestGlobalCallback(t *testing.T) {
+	t.Parallel()
+	logContent := "2025-05-16 10:00:00 [Globals] [] Team \"Test Team\" killed a creature (Test Beast) with a value of 100 PED\n" +
+		"2025-05-16 10:01:00 [Globals] [] Test Player killed a creature (Test Beast) with a value of 50 PED\n"
+
+	// Create a temporary test file
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "callback_test.log")
+
+	if err := os.WriteFile(tmpFile, []byte(logContent), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	db := NewEntropyDB("", "")
+
+	callbackCount := 0
+	callback := func(entry *GlobalEntry) {
+		callbackCount++
+	}
+
+	// Test ProcessChatLog
+	// Note: We use nil for logger to avoid noise, but keep callback
+	_, err := db.ProcessChatLog(tmpFile, nil, nil, callback)
+	if err != nil {
+		t.Errorf("ProcessChatLog failed: %v", err)
+	}
+
+	if callbackCount != 2 {
+		t.Errorf("Expected 2 callback calls from ProcessChatLog, got %d", callbackCount)
+	}
+
+	// Test ProcessChatLogFromOffset
+	callbackCount = 0 // Reset
+	_, err = db.ProcessChatLogFromOffset(tmpFile, 0, nil, nil, callback)
+	if err != nil {
+		t.Errorf("ProcessChatLogFromOffset failed: %v", err)
+	}
+
+	if callbackCount != 2 {
+		t.Errorf("Expected 2 callback calls from ProcessChatLogFromOffset, got %d", callbackCount)
+	}
+}
+func TestTeamFilteringSpecialChars(t *testing.T) {
+	// Log with various team name formats including special characters
+	testData := "2025-05-16 10:00:00 [Globals] [] Team \"Sjöpung\" killed a creature (Test Beast) with a value of 100 PED\n" +
+		"2025-05-16 10:01:00 [Globals] [] Team \"sjöpung\" killed a creature (Test Beast) with a value of 50 PED\n" +
+		"2025-05-16 10:02:00 [Globals] [] Team \"Other Team\" killed a creature (Test Beast) with a value of 75 PED\n"
+
+	// Create a temporary test file
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "team_special_chars.log")
+
+	if err := os.WriteFile(tmpFile, []byte(testData), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		filterTeam    string
+		expectedCount int
+	}{
+		{
+			name:          "Exact match special char",
+			filterTeam:    "Sjöpung",
+			expectedCount: 2, // Should match both cases if case-insensitive
+		},
+		{
+			name:          "Lowercase match special char",
+			filterTeam:    "sjöpung",
+			expectedCount: 2,
+		},
+		{
+			name:          "No match",
+			filterTeam:    "Nonexistent",
+			expectedCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := NewEntropyDB("", tt.filterTeam)
+			count, err := db.ProcessChatLog(tmpFile, nil, nil, nil)
+			if err != nil {
+				t.Fatalf("ProcessChatLog failed: %v", err)
+			}
+
+			if count != tt.expectedCount {
+				t.Errorf("Expected %d globals, got %d for team filter '%s'", tt.expectedCount, count, tt.filterTeam)
+			}
+		})
+	}
+}
+
+func TestTeamFilteringHTMLEntities(t *testing.T) {
+	// Log with HTML entity encoded name wrapped in HTML entity quotes
+	// This simulates "Sjöpung" where ö is &ouml; and quotes are &quot;
+	testData := "2025-05-16 10:00:00 [Globals] [] Team &quot;Sj&ouml;pung&quot; killed a creature (Test Beast) with a value of 100 PED\n"
+
+	// Create a temporary test file
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "team_html_entities.log")
+
+	if err := os.WriteFile(tmpFile, []byte(testData), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	db := NewEntropyDB("", "Sjöpung")
+	count, err := db.ProcessChatLog(tmpFile, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ProcessChatLog failed: %v", err)
+	}
+
+	if count != 1 {
+		t.Errorf("Expected 1 global, got %d for team filter 'Sjöpung' with encoded log", count)
 	}
 }

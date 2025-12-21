@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -149,12 +150,54 @@ func (s *DataProcessorService) processLogFile() error {
 
 	// Store the current globals count before processing
 	oldGlobalsCount := len(s.db.Globals) // If we haven't processed this file before, process it from the beginning
-	if s.db.LastProcessedSize == 0 {
+	// Define a callback to print all globals to the CLI
+	printGlobal := func(g *storage.GlobalEntry) {
+		// Determine if we should print this global
+		shouldPrint := s.config.Verbose
+
+		// If not verbose, only print own globals
+		if !shouldPrint {
+			isOwn := false
+			if s.config.PlayerName != "" && strings.EqualFold(g.PlayerName, s.config.PlayerName) {
+				isOwn = true
+			}
+			// Also include team members if team name is set? The user said "users own globals".
+			// Let's stick to strict own globals for now, maybe team too if requested, but "own" usually means me.
+			// However, usually one wants to see team HOFs too.
+			// Let's assume "Own" means PlayerName match.
+			shouldPrint = isOwn
+		}
+
+		if shouldPrint {
+			// Simple format: [Global] <Type> <Player> <Target> <Value> PED
+			fmt.Printf("[Global] %s: %s - %s (%s) - %.2f PED\n", g.Timestamp.Format("15:04:05"), g.Type, g.PlayerName, g.Target, g.Value)
+			if g.IsHof {
+				fmt.Printf("   *** HALL OF FAME ***\n")
+			}
+		}
+	}
+
+	// Check for file rotation or path change
+	shouldReset := false
+	if s.chatLogPath != s.db.LastLogPath && s.db.LastLogPath != "" {
+		s.log.Info("Chat log path changed from %s to %s", s.db.LastLogPath, s.chatLogPath)
+		shouldReset = true
+	} else if fileInfo.Size() < s.db.LastProcessedSize {
+		s.log.Info("Chat log rotated (size decreased from %d to %d)", s.db.LastProcessedSize, fileInfo.Size())
+		shouldReset = true
+	}
+
+	if s.db.LastProcessedSize == 0 || shouldReset {
 		// Set this flag to prevent taking screenshots for historical globals
 		s.isImportMode = true
 
-		s.log.Info("Processing entire chat log file: %s", s.chatLogPath)
-		count, err := s.db.ProcessChatLog(s.chatLogPath, s.progressChan, s.log)
+		if shouldReset {
+			s.log.Info("Resetting processing from beginning of file")
+		} else {
+			s.log.Info("Processing entire chat log file: %s", s.chatLogPath)
+		}
+
+		count, err := s.db.ProcessChatLog(s.chatLogPath, s.progressChan, s.log, printGlobal)
 		if err != nil {
 			return fmt.Errorf("failed to process chat log: %w", err)
 		}
@@ -168,7 +211,7 @@ func (s *DataProcessorService) processLogFile() error {
 	} else if fileInfo.Size() > s.db.LastProcessedSize {
 		// Process only new content
 		s.log.Debug("Processing new entries in chat log")
-		count, err := s.db.ProcessChatLogFromOffset(s.chatLogPath, s.db.LastProcessedSize, nil, s.log)
+		count, err := s.db.ProcessChatLogFromOffset(s.chatLogPath, s.db.LastProcessedSize, nil, s.log, printGlobal)
 		if err != nil {
 			return fmt.Errorf("failed to process new entries: %w", err)
 		}
@@ -184,6 +227,9 @@ func (s *DataProcessorService) processLogFile() error {
 			}
 		}
 	}
+
+	// Update last log path
+	s.db.LastLogPath = s.chatLogPath
 
 	// Save the database after processing
 	dbPath := s.config.DatabasePath
@@ -236,7 +282,7 @@ func (s *DataProcessorService) ProcessLogOnly() error {
 	s.isImportMode = true
 	s.initialProcess = true
 
-	// Process the log file
+	// Use processLogFile to ensure we handle rotation and path updates correctly
 	if err := s.processLogFile(); err != nil {
 		return err
 	}

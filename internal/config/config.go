@@ -13,6 +13,7 @@ type Config struct {
 	GameWindowTitle     string  `yaml:"game_window_title"`
 	EnableWebServer     bool    `yaml:"enable_web_server"`
 	WebServerPort       int     `yaml:"web_server_port"`
+	Verbose             bool    `yaml:"-"` // Not stored in config file, runtime flag only
 }
 
 // NewDefaultConfig returns a config with default values
