@@ -72,6 +72,9 @@ func main() { // Define command-line flags
 		os.Exit(1)
 	}
 
+	// Set runtime flags
+	cfg.Verbose = *verbose
+
 	actualConfigPath := configManager.GetConfigPath()
 	log.Info("Configuration loaded from: %s", actualConfigPath)
 
@@ -118,11 +121,11 @@ func main() { // Define command-line flags
 		// Run the data processor
 		if *importLog {
 			// One-time import mode
-			if err := dataProcessor.Run(); err != nil {
+			if err := dataProcessor.ProcessLogOnly(); err != nil {
 				log.Error("Failed to process data: %v", err)
 				os.Exit(1)
 			}
-			dataProcessor.Stop()
+			// ProcessLogOnly finishes when done, no need to stop service as it wasn't "started" in background
 		} else if *monitor || (!*importLog && !*showStats) {
 			// Start monitoring in background
 			go func() {
