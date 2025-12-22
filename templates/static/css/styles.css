@@ -7,13 +7,15 @@
     height: 20px;
     border: 3px solid rgba(0, 0, 0, 0.1);
     border-radius: 50%;
-    border-top-color: #09f;
+    border-top-color: #2980b9;
     animation: spin 1s ease-in-out infinite;
     margin-left: 10px;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Dark mode toggle */
@@ -57,16 +59,72 @@ body.dark-mode .stat-card {
     background-color: #444;
 }
 
+/* Sortable table headers */
+th.sortable {
+    user-select: none;
+    transition: background-color 0.2s ease;
+}
+
+th.sortable:hover {
+    background-color: #e0e0e0;
+}
+
+body.dark-mode th.sortable:hover {
+    background-color: #555;
+}
+
+.sort-indicator {
+    font-size: 0.8em;
+    color: #666;
+}
+
+body.dark-mode .sort-indicator {
+    color: #aaa;
+}
+
+/* Scrollable table container */
+.table-scroll-container {
+    max-height: 650px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+body.dark-mode .table-scroll-container {
+    border-color: #555;
+}
+
+/* Sticky table headers */
+.table-scroll-container table {
+    margin: 0;
+}
+
+.table-scroll-container thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table-scroll-container th {
+    background-color: #f2f2f2;
+}
+
+body.dark-mode .table-scroll-container th {
+    background-color: #444;
+}
+
+
 /* Responsive styles */
 @media (max-width: 1920px) {
     .container {
         flex-direction: column;
     }
-    
+
     .card {
         min-width: 100%;
     }
-    
+
     table {
         font-size: 14px;
     }

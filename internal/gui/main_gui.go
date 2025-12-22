@@ -672,10 +672,45 @@ func (g *MainGUI) createDebugTab() fyne.CanvasObject {
 		debugStatusLabel.SetText("Configuration reloaded manually")
 	})
 
+	// Create list windows button
+	listWindowsButton := widget.NewButtonWithIcon("List Windows", theme.SearchIcon(), func() {
+		go func() {
+			// Update status label
+			fyne.Do(func() {
+				debugStatusLabel.SetText("Searching for windows...")
+			})
+
+			// List all windows containing "Entropia"
+			windows, err := screenshot.ListWindowsContaining("Entropia")
+
+			// Update UI on main thread
+			fyne.Do(func() {
+				if err != nil {
+					debugStatusLabel.SetText(fmt.Sprintf("Error: %v", err))
+					dialog.ShowError(err, g.mainWindow)
+				} else if len(windows) == 0 {
+					debugStatusLabel.SetText("No windows found")
+					dialog.ShowInformation("Window List", "No windows containing 'Entropia' were found", g.mainWindow)
+				} else {
+					// Build message with all window titles
+					message := fmt.Sprintf("Found %d window(s):\n\n", len(windows))
+					for i, win := range windows {
+						message += fmt.Sprintf("%d. %s\n", i+1, win.Title)
+					}
+					message += "\nYou can use any of these titles (or a prefix) in the 'Game Window Title' configuration."
+
+					debugStatusLabel.SetText(fmt.Sprintf("Found %d window(s)", len(windows)))
+					dialog.ShowInformation("Window List", message, g.mainWindow)
+				}
+			})
+		}()
+	})
+
 	// Create debug tools section
 	debugToolsBox := container.NewVBox(
 		widget.NewLabelWithStyle("Debug Tools", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		screenshotTestButton,
+		listWindowsButton,
 		configReloadButton,
 		debugStatusLabel,
 	)

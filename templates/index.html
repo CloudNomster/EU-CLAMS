@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +18,7 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+
         header {
             background-color: #3a3a3a;
             color: white;
@@ -24,54 +26,68 @@
             border-radius: 5px;
             margin-bottom: 20px;
         }
-        h1, h2, h3 {
-            color: #2c3e50;
+
+        h1,
+        h2,
+        h3 {
+            color: #2980b9;
         }
+
         .container {
             display: flex;
             flex-wrap: wrap;
             gap: 20px;
         }
+
         .card {
             background: white;
             border-radius: 5px;
             padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             flex: 1;
             min-width: 300px;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin: 20px 0;
         }
-        th, td {
+
+        th,
+        td {
             padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }
+
         th {
             background-color: #f2f2f2;
         }
+
         tr:hover {
             background-color: #f5f5f5;
         }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 15px;
         }
+
         .stat-card {
             background: white;
             padding: 15px;
             border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
+
         .stat-value {
             font-size: 24px;
             font-weight: bold;
             color: #2980b9;
         }
+
         .notification {
             position: fixed;
             bottom: 20px;
@@ -80,13 +96,15 @@
             color: white;
             padding: 15px;
             border-radius: 5px;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.16);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
             opacity: 0;
             transition: opacity 0.3s ease;
         }
+
         .notification.show {
             opacity: 1;
         }
+
         footer {
             text-align: center;
             margin-top: 30px;
@@ -95,6 +113,7 @@
         }
     </style>
 </head>
+
 <body>
     <header>
         <h1>EU-CLAMS Statistics</h1>
@@ -106,10 +125,18 @@
         </p>
         <p>Last updated: <span id="last-updated"></span></p>
         <script>
-            document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('DOMContentLoaded', function () {
                 const timestamp = "{{ .Generated }}";
                 const date = new Date(timestamp);
-                document.getElementById('last-updated').textContent = date.toLocaleString();
+                document.getElementById('last-updated').textContent = date.toLocaleString('en-GB', {
+                    hour12: false,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
             });
         </script>
     </header>
@@ -173,45 +200,65 @@
             </table>
         </div>
         <div class="card">
-            <h2>Latest Globals (10)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Type</th>
-                        <th>Target</th>
-                        <th>Value (PED)</th>
-                    </tr>
-                </thead>                <tbody id="latest-globals">                    {{ range .Globals }}
-                    <tr>
-                        <td class="timestamp" data-time="{{ .Timestamp.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
-                        <td>{{ .Type }}</td>
-                        <td>{{ .Target }}</td>
-                        <td>{{ .Value }}</td>
-                    </tr>
-                    {{ end }}
-                </tbody>
-            </table>
-        </div>        <div class="card">
-            <h2>Hall of Fame Entries (10)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Type</th>
-                        <th>Target</th>
-                        <th>Value (PED)</th>
-                    </tr>
-                </thead>                <tbody id="latest-hofs">                    {{ range .Hofs }}
-                    <tr>
-                        <td class="timestamp" data-time="{{ .Timestamp.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Timestamp.Format "2006-01-02 15:04:05" }}</td>
-                        <td>{{ .Type }}</td>
-                        <td>{{ .Target }}</td>
-                        <td>{{ .Value }}</td>
-                    </tr>
-                    {{ end }}
-                </tbody>
-            </table>
+            <h2>Globals</h2>
+            <div class="table-scroll-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="time" data-table="globals" style="cursor: pointer;">Time
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th>Type</th>
+                            <th>Target</th>
+                            <th class="sortable" data-sort="value" data-table="globals" style="cursor: pointer;">Value
+                                (PED)
+                                <span class="sort-indicator"></span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="latest-globals"> {{ range .Globals }}
+                        <tr>
+                            <td class="timestamp" data-time="{{ .Timestamp.Format " 2006-01-02T15:04:05Z07:00" }}">{{
+                                .Timestamp.Format "2006-01-02 15:04:05" }}</td>
+                            <td>{{ .Type }}</td>
+                            <td>{{ .Target }}</td>
+                            <td>{{ .Value }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <h2>HoFs</h2>
+            <div class="table-scroll-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="time" data-table="hofs" style="cursor: pointer;">Time
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th>Type</th>
+                            <th>Target</th>
+                            <th class="sortable" data-sort="value" data-table="hofs" style="cursor: pointer;">Value
+                                (PED)
+                                <span class="sort-indicator"></span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="latest-hofs"> {{ range .Hofs }}
+                        <tr>
+                            <td class="timestamp" data-time="{{ .Timestamp.Format " 2006-01-02T15:04:05Z07:00" }}">
+                                {{
+                                .Timestamp.Format "2006-01-02 15:04:05" }}</td>
+                            <td>{{ .Type }}</td>
+                            <td>{{ .Target }}</td>
+                            <td>{{ .Value }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -224,18 +271,26 @@
     <script>
         // WebSocket connection
         const ws = new WebSocket(`ws://${window.location.host}/ws`);
-        
-        ws.onopen = function() {
+
+        ws.onopen = function () {
             console.log('WebSocket connection established');
         };
-        
-        ws.onmessage = function(event) {
+
+        ws.onmessage = function (event) {
             const data = JSON.parse(event.data);
             console.log('WebSocket message received:', data);
-              // Update last updated time with browser-localized format
+            // Update last updated time in 24-hour format
             const updateTime = new Date(data.time);
-            document.getElementById('last-updated').textContent = updateTime.toLocaleString();
-            
+            document.getElementById('last-updated').textContent = updateTime.toLocaleString('en-GB', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
             // Handle different event types
             if (data.type === 'new_global') {
                 handleNewGlobal(data.data);
@@ -244,79 +299,95 @@
             } else if (data.type === 'stats_update') {
                 updateStats(data.data);
             }
-            
+
             // Show notification
             showNotification(`New ${data.type.replace('_', ' ')} received!`);
         };
-        
-        ws.onclose = function() {
+
+        ws.onclose = function () {
             console.log('WebSocket connection closed');
             // Try to reconnect after 5 seconds
-            setTimeout(function() {
+            setTimeout(function () {
                 location.reload();
             }, 5000);
         };
-          // Function to handle new global entry
+        // Function to handle new global entry
         function handleNewGlobal(global) {
             const table = document.getElementById('latest-globals');
             const row = table.insertRow(0);
-              const timeCell = row.insertCell(0);
+            const timeCell = row.insertCell(0);
             const typeCell = row.insertCell(1);
             const targetCell = row.insertCell(2);
             const valueCell = row.insertCell(3);
-              // Format the timestamp using the browser's locale
+            // Format the timestamp in 24-hour format
             const date = new Date(global.timestamp);
-            timeCell.textContent = date.toLocaleString();
+            timeCell.textContent = date.toLocaleString('en-GB', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
             typeCell.textContent = global.type;
             targetCell.textContent = global.target;
             valueCell.textContent = global.value;
-            
+
             // Highlight the new row
             row.style.backgroundColor = '#ffffd0';
             setTimeout(() => {
                 row.style.backgroundColor = '';
             }, 5000);
-            
+
             // Remove excess rows to keep only 10
             if (table.rows.length > 10) {
                 table.deleteRow(10);
             }
         }
-          // Function to handle new HoF entry
+        // Function to handle new HoF entry
         function handleNewHof(hof) {
             // Add to HoF table
             const table = document.getElementById('latest-hofs');
             const row = table.insertRow(0);
-              const timeCell = row.insertCell(0);
+            const timeCell = row.insertCell(0);
             const typeCell = row.insertCell(1);
             const targetCell = row.insertCell(2);
             const valueCell = row.insertCell(3);
-              // Format the timestamp using the browser's locale
+            // Format the timestamp in 24-hour format
             const date = new Date(hof.timestamp);
-            timeCell.textContent = date.toLocaleString();
+            timeCell.textContent = date.toLocaleString('en-GB', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
             typeCell.textContent = hof.type;
             targetCell.textContent = hof.target;
             valueCell.textContent = hof.value;
-            
+
             // Highlight the new row
             row.style.backgroundColor = '#d0ffd0';
             setTimeout(() => {
                 row.style.backgroundColor = '';
             }, 5000);
-            
+
             // Remove excess rows to keep only 10
             if (table.rows.length > 10) {
                 table.deleteRow(10);
             }
         }
-        
+
         // Function to update statistics
         function updateStats(stats) {
             document.getElementById('total-globals').textContent = stats.TotalGlobals;
             document.getElementById('total-hofs').textContent = stats.TotalHofs;
             document.getElementById('total-value').textContent = stats.TotalValue.toFixed(2);
             document.getElementById('highest-value').textContent = stats.HighestValue.toFixed(2);
-            
+
             // Update globals by type
             const typeTable = document.getElementById('globals-by-type');
             typeTable.innerHTML = '';
@@ -327,7 +398,7 @@
                 typeCell.textContent = type;
                 countCell.textContent = count;
             }
-            
+
             // Update globals by location
             const locationTable = document.getElementById('globals-by-location');
             locationTable.innerHTML = '';
@@ -339,29 +410,38 @@
                 countCell.textContent = count;
             }
         }
-        
+
         // Function to show notification
         function showNotification(message) {
             const notification = document.getElementById('notification');
             notification.textContent = message;
             notification.classList.add('show');
-            
+
             setTimeout(() => {
                 notification.classList.remove('show');
             }, 5000);
         }
-        
+
         // Initialize all timestamps on page load to use browser localization
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Convert all timestamp cells to localized format
-            document.querySelectorAll('.timestamp').forEach(function(cell) {
+            document.querySelectorAll('.timestamp').forEach(function (cell) {
                 const isoTime = cell.getAttribute('data-time');
                 if (isoTime) {
                     const date = new Date(isoTime);
-                    cell.textContent = date.toLocaleString();
+                    cell.textContent = date.toLocaleString('en-GB', {
+                        hour12: false,
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
                 }
             });
         });
     </script>
 </body>
+
 </html>
