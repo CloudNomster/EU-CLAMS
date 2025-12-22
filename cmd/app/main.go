@@ -53,17 +53,32 @@ func main() { // Define command-line flags
 	// Load configuration using the centralized manager
 	configManager := config.NewManager()
 	// Set up command-line overrides
-	overrides := config.CommandLineOverrides{
-		ConfigPath:          configPath,
-		PlayerName:          playerName,
-		TeamName:            teamName,
-		ChatLogPath:         logPath,
-		EnableScreenshots:   enableScreenshots,
-		ScreenshotDirectory: screenshotDir,
-		GameWindowTitle:     gameWindow,
-		EnableWebServer:     webServer,
-		WebServerPort:       webPort,
-	}
+	// Set up command-line overrides
+	overrides := config.CommandLineOverrides{}
+
+	// Only apply overrides for flags that were explicitly set
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "config":
+			overrides.ConfigPath = configPath
+		case "player":
+			overrides.PlayerName = playerName
+		case "team":
+			overrides.TeamName = teamName
+		case "log":
+			overrides.ChatLogPath = logPath
+		case "screenshots":
+			overrides.EnableScreenshots = enableScreenshots
+		case "screenshot-dir":
+			overrides.ScreenshotDirectory = screenshotDir
+		case "game-window":
+			overrides.GameWindowTitle = gameWindow
+		case "web":
+			overrides.EnableWebServer = webServer
+		case "web-port":
+			overrides.WebServerPort = webPort
+		}
+	})
 
 	// Load config with overrides
 	cfg, err := configManager.LoadConfig(*configPath, overrides)
