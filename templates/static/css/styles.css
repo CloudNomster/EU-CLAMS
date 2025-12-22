@@ -7,7 +7,7 @@
     height: 20px;
     border: 3px solid rgba(0, 0, 0, 0.1);
     border-radius: 50%;
-    border-top-color: #09f;
+    border-top-color: #2980b9;
     animation: spin 1s ease-in-out infinite;
     margin-left: 10px;
 }
@@ -84,8 +84,7 @@ body.dark-mode .sort-indicator {
 
 /* Scrollable table container */
 .table-scroll-container {
-    max-height: 500px;
-    /* Roughly 10 rows */
+    max-height: 650px;
     overflow-y: auto;
     overflow-x: auto;
     border: 1px solid #ddd;

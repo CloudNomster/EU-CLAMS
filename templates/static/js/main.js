@@ -136,6 +136,7 @@ function updateGlobals(globals) {
 
         // Format the timestamp in 24-hour format
         const date = new Date(global.timestamp);
+        timeCell.setAttribute('data-time', global.timestamp); // Store ISO for sorting
         timeCell.textContent = formatDateTime(date);
         typeCell.textContent = global.type;
         targetCell.textContent = global.target;
@@ -170,6 +171,7 @@ function updateHofs(hofs) {
 
         // Format the timestamp in 24-hour format
         const date = new Date(hof.timestamp);
+        timeCell.setAttribute('data-time', hof.timestamp); // Store ISO for sorting
         timeCell.textContent = formatDateTime(date);
         typeCell.textContent = hof.type;
         targetCell.textContent = hof.target;
@@ -216,11 +218,11 @@ function sortTable(tableName, sortBy) {
         let aVal, bVal;
 
         if (sortBy === 'time') {
-            // Get timestamp from first cell
-            const aTime = new Date(a.cells[0].textContent);
-            const bTime = new Date(b.cells[0].textContent);
-            aVal = aTime.getTime();
-            bVal = bTime.getTime();
+            // Get ISO timestamp from data-time attribute
+            const aTimeAttr = a.cells[0].getAttribute('data-time');
+            const bTimeAttr = b.cells[0].getAttribute('data-time');
+            aVal = new Date(aTimeAttr).getTime();
+            bVal = new Date(bTimeAttr).getTime();
         } else if (sortBy === 'value') {
             // Get value from last cell (remove any non-numeric characters)
             aVal = parseFloat(a.cells[3].textContent.replace(/[^0-9.-]/g, '')) || 0;
