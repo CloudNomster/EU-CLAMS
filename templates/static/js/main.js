@@ -37,6 +37,19 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 
+// Helper function to format date in 24-hour format
+function formatDateTime(date) {
+    return date.toLocaleString('en-GB', {
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
 // Function to refresh data
 function refreshData() {
     // Fetch updated stats
@@ -62,8 +75,8 @@ function refreshData() {
             updateHofs(hofs);
         })
         .catch(error => console.error('Error fetching HOFs:', error));
-    // Update last updated time with browser-localized format
-    document.getElementById('last-updated').textContent = new Date().toLocaleString();
+    // Update last updated time in 24-hour format
+    document.getElementById('last-updated').textContent = formatDateTime(new Date());
 }
 
 // Function to update stats display
@@ -121,9 +134,9 @@ function updateGlobals(globals) {
         const targetCell = row.insertCell(2);
         const valueCell = row.insertCell(3);
 
-        // Format the timestamp as a localized date using the browser
+        // Format the timestamp in 24-hour format
         const date = new Date(global.timestamp);
-        timeCell.textContent = date.toLocaleString();
+        timeCell.textContent = formatDateTime(date);
         typeCell.textContent = global.type;
         targetCell.textContent = global.target;
         valueCell.textContent = global.value;
@@ -155,9 +168,9 @@ function updateHofs(hofs) {
         const targetCell = row.insertCell(2);
         const valueCell = row.insertCell(3);
 
-        // Format the timestamp as a localized date using the browser
+        // Format the timestamp in 24-hour format
         const date = new Date(hof.timestamp);
-        timeCell.textContent = date.toLocaleString();
+        timeCell.textContent = formatDateTime(date);
         typeCell.textContent = hof.type;
         targetCell.textContent = hof.target;
         valueCell.textContent = hof.value;

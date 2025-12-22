@@ -128,7 +128,15 @@
             document.addEventListener('DOMContentLoaded', function () {
                 const timestamp = "{{ .Generated }}";
                 const date = new Date(timestamp);
-                document.getElementById('last-updated').textContent = date.toLocaleString();
+                document.getElementById('last-updated').textContent = date.toLocaleString('en-GB', {
+                    hour12: false,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
             });
         </script>
     </header>
@@ -271,9 +279,17 @@
         ws.onmessage = function (event) {
             const data = JSON.parse(event.data);
             console.log('WebSocket message received:', data);
-            // Update last updated time with browser-localized format
+            // Update last updated time in 24-hour format
             const updateTime = new Date(data.time);
-            document.getElementById('last-updated').textContent = updateTime.toLocaleString();
+            document.getElementById('last-updated').textContent = updateTime.toLocaleString('en-GB', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
 
             // Handle different event types
             if (data.type === 'new_global') {
@@ -303,9 +319,17 @@
             const typeCell = row.insertCell(1);
             const targetCell = row.insertCell(2);
             const valueCell = row.insertCell(3);
-            // Format the timestamp using the browser's locale
+            // Format the timestamp in 24-hour format
             const date = new Date(global.timestamp);
-            timeCell.textContent = date.toLocaleString();
+            timeCell.textContent = date.toLocaleString('en-GB', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
             typeCell.textContent = global.type;
             targetCell.textContent = global.target;
             valueCell.textContent = global.value;
@@ -330,9 +354,17 @@
             const typeCell = row.insertCell(1);
             const targetCell = row.insertCell(2);
             const valueCell = row.insertCell(3);
-            // Format the timestamp using the browser's locale
+            // Format the timestamp in 24-hour format
             const date = new Date(hof.timestamp);
-            timeCell.textContent = date.toLocaleString();
+            timeCell.textContent = date.toLocaleString('en-GB', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
             typeCell.textContent = hof.type;
             targetCell.textContent = hof.target;
             valueCell.textContent = hof.value;
@@ -397,7 +429,15 @@
                 const isoTime = cell.getAttribute('data-time');
                 if (isoTime) {
                     const date = new Date(isoTime);
-                    cell.textContent = date.toLocaleString();
+                    cell.textContent = date.toLocaleString('en-GB', {
+                        hour12: false,
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
                 }
             });
         });
