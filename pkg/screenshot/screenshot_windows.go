@@ -86,6 +86,55 @@ const (
 	PW_RENDERFULLCONTENT = 0x00000002
 )
 
+// WindowInfo holds information about a window
+type WindowInfo struct {
+	Handle syscall.Handle
+	Title  string
+}
+
+// ListWindowsContaining returns all windows whose titles contain the given substring (case-insensitive)
+func ListWindowsContaining(substring string) ([]WindowInfo, error) {
+	var windows []WindowInfo
+	substringLower := strings.ToLower(substring)
+
+	// Use EnumWindows to find all windows containing the substring
+	cb := syscall.NewCallback(func(h syscall.Handle, param uintptr) uintptr {
+		// Get the window title
+		var title [256]uint16
+		procGetWindowTextW := user32.NewProc("GetWindowTextW")
+		clearLastError()
+		ret, _, _ := procGetWindowTextW.Call(
+			uintptr(h),
+			uintptr(unsafe.Pointer(&title[0])),
+			uintptr(len(title)),
+		)
+
+		// Convert to Go string and compare
+		if ret > 0 {
+			titleStr := syscall.UTF16ToString(title[:ret])
+			if strings.Contains(strings.ToLower(titleStr), substringLower) && titleStr != "" {
+				windows = append(windows, WindowInfo{
+					Handle: h,
+					Title:  titleStr,
+				})
+			}
+		}
+
+		return 1 // Continue enumeration
+	})
+
+	// Enumerate all windows
+	procEnumWindows := user32.NewProc("EnumWindows")
+	clearLastError()
+	ret, _, _ := procEnumWindows.Call(cb, 0)
+	if ret == 0 {
+		// EnumWindows failed
+		return nil, fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
+	}
+
+	return windows, nil
+}
+
 // FindWindowWithPartialTitle finds a window where the title starts with the given prefix
 func FindWindowWithPartialTitle(titlePrefix string) (syscall.Handle, error) {
 	handle, _, err := findWindowWithPartialTitleAndGetTitle(titlePrefix)

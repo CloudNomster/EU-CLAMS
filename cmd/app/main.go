@@ -4,6 +4,7 @@ import (
 	"eu-clams/internal/config"
 	"eu-clams/internal/gui"
 	"eu-clams/internal/logger"
+	"eu-clams/pkg/screenshot"
 	"eu-clams/src/service"
 	"flag"
 	"fmt"
@@ -35,9 +36,32 @@ func main() { // Define command-line flags
 	webServer := flag.Bool("web", false, "Start a web server to view statistics")
 	webPort := flag.Int("web-port", 8080, "Port for the web server")
 	verbose := flag.Bool("verbose", false, "Enable verbose (debug) logging")
+	listWindows := flag.Bool("list-windows", false, "List all windows containing 'Entropia' (Windows only)")
 
 	// Parse command-line flags
 	flag.Parse()
+
+	// Handle list-windows command before anything else
+	if *listWindows {
+		fmt.Println("Listing all windows containing 'Entropia'...")
+		windows, err := screenshot.ListWindowsContaining("Entropia")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing windows: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(windows) == 0 {
+			fmt.Println("No windows found containing 'Entropia'")
+		} else {
+			fmt.Printf("Found %d window(s):\n", len(windows))
+			for i, win := range windows {
+				fmt.Printf("  %d. %s\n", i+1, win.Title)
+			}
+			fmt.Println("\nYou can use any of these window titles (or a prefix) with the -game-window flag.")
+		}
+		os.Exit(0)
+	}
+
 	// Display version if requested
 	if *showVersion {
 		fmt.Printf("EU-CLAMS v%s\n", version)
