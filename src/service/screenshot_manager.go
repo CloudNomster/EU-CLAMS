@@ -23,8 +23,8 @@ type ScreenshotManager struct {
 
 // NewScreenshotManager creates a new screenshot manager
 func NewScreenshotManager(screenshotDir, gameWindowTitle string, enabled bool, delaySeconds float64) *ScreenshotManager {
-	// Check if we're on Windows, which is the only platform with screenshot support
-	platformSupport := runtime.GOOS == "windows"
+	// Check supported platforms
+	platformSupport := runtime.GOOS == "windows" || runtime.GOOS == "linux"
 
 	return &ScreenshotManager{
 		screenshotDir:   screenshotDir,
