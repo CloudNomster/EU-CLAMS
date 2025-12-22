@@ -220,7 +220,7 @@ func (s *WebService) handleStats(w http.ResponseWriter, r *http.Request) {
 
 // handleGlobals handles the globals API endpoint
 func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
-	limit := 10 // Default to 10 to match the initial page load
+	limit := 0 // Default to 0 (all globals)
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
@@ -229,8 +229,8 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 
 	// Always get fresh globals from the database
 	globals := s.db.GetPlayerGlobals()
-	if len(globals) > limit {
-		globals = globals[:limit] // Take first 10 (already sorted newest first)
+	if limit > 0 && len(globals) > limit {
+		globals = globals[:limit] // Limit if specified
 	}
 
 	// Convert to JSON-friendly objects with ISO8601 UTC timestamps
@@ -260,7 +260,7 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 
 // handleHofs handles the HOFs API endpoint
 func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
-	limit := 10 // Default to 10 to match the initial page load
+	limit := 0 // Default to 0 (all HoFs)
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
@@ -269,8 +269,8 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 
 	// Always get fresh HOFs from the database
 	hofs := s.db.GetPlayerHofs()
-	if len(hofs) > limit {
-		hofs = hofs[:limit] // Take first 10 (already sorted newest first)
+	if limit > 0 && len(hofs) > limit {
+		hofs = hofs[:limit] // Limit if specified
 	}
 
 	// Convert to JSON-friendly objects with ISO8601 UTC timestamps
