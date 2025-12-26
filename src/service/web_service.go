@@ -21,6 +21,7 @@ import (
 type WebService struct {
 	*BaseService
 	log         *logger.Logger
+	dbPath      string
 	db          *storage.EntropyDB
 	playerName  string
 	teamName    string
@@ -37,11 +38,11 @@ type WebService struct {
 }
 
 // NewWebService creates a new WebService instance
-func NewWebService(log *logger.Logger, db *storage.EntropyDB, playerName, teamName string, port int) *WebService {
+func NewWebService(log *logger.Logger, dbPath string, playerName, teamName string, port int) *WebService {
 	return &WebService{
 		BaseService:  NewBaseService("WebService"),
 		log:          log,
-		db:           db,
+		dbPath:       dbPath,
 		playerName:   playerName,
 		teamName:     teamName,
 		port:         port,
@@ -80,8 +81,8 @@ func (s *WebService) Initialize() error {
 	s.log.Info("WebService initializing...")
 
 	// Validate required fields
-	if s.db == nil {
-		return fmt.Errorf("database is required for web service")
+	if s.dbPath == "" {
+		return fmt.Errorf("database path is required for web service")
 	}
 
 	// Check if template directory exists
@@ -157,6 +158,16 @@ func (s *WebService) Stop() error {
 	return nil
 }
 
+// reloadDB reloads the database from disk
+func (s *WebService) reloadDB() error {
+	db, err := storage.LoadDatabase(s.dbPath, s.log)
+	if err != nil {
+		return fmt.Errorf("failed to reload database: %w", err)
+	}
+	s.db = db
+	return nil
+}
+
 // handleIndex handles the index page
 func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
@@ -164,7 +175,18 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Always reload the database from disk
+	if err := s.reloadDB(); err != nil {
+		s.log.Error("Failed to reload database: %v", err)
+		// Don't return error here, try to use existing db if any
+	}
+
 	// Generate stats - always get fresh data from the database
+	if s.db == nil {
+		http.Error(w, "Database not available", http.StatusInternalServerError)
+		return
+	}
+
 	statsData := s.db.GetStatsData()
 	allGlobals := s.db.GetPlayerGlobals()
 	allHofs := s.db.GetPlayerHofs()
@@ -206,6 +228,16 @@ func (s *WebService) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // handleStats handles the stats API endpoint
 func (s *WebService) handleStats(w http.ResponseWriter, r *http.Request) {
+	// Always reload the database from disk
+	if err := s.reloadDB(); err != nil {
+		s.log.Error("Failed to reload database: %v", err)
+	}
+
+	if s.db == nil {
+		http.Error(w, "Database not available", http.StatusInternalServerError)
+		return
+	}
+
 	// Always get fresh stats from the database
 	statsData := s.db.GetStatsData()
 
@@ -225,6 +257,16 @@ func (s *WebService) handleGlobals(w http.ResponseWriter, r *http.Request) {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
+	}
+
+	// Always reload the database from disk
+	if err := s.reloadDB(); err != nil {
+		s.log.Error("Failed to reload database: %v", err)
+	}
+
+	if s.db == nil {
+		http.Error(w, "Database not available", http.StatusInternalServerError)
+		return
 	}
 
 	// Always get fresh globals from the database
@@ -265,6 +307,16 @@ func (s *WebService) handleHofs(w http.ResponseWriter, r *http.Request) {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
+	}
+
+	// Always reload the database from disk
+	if err := s.reloadDB(); err != nil {
+		s.log.Error("Failed to reload database: %v", err)
+	}
+
+	if s.db == nil {
+		http.Error(w, "Database not available", http.StatusInternalServerError)
+		return
 	}
 
 	// Always get fresh HOFs from the database

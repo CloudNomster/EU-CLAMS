@@ -7,6 +7,7 @@ import (
 	"eu-clams/pkg/screenshot"
 	"eu-clams/src/service"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,7 @@ type MainGUI struct {
 	gameWindowTitleEntry   *widget.Entry
 	enableWebServerCheck   *widget.Check
 	webServerPortEntry     *widget.Entry
+	verboseCheck           *widget.Check
 
 	// Configuration reloading
 	reloadTicker *time.Ticker
@@ -353,23 +355,8 @@ func (g *MainGUI) initWebServer() (string, error) {
 		return "", fmt.Errorf("player name is required")
 	}
 
-	// Get database from existing service or create new one
-	var db *storage.EntropyDB
-	if g.dataService != nil {
-		db = g.dataService.GetDatabase()
-	} else {
-		// Initialize data processor service just to get database
-		tempService := service.NewDataProcessorService(g.log, g.config, "")
-		if err := tempService.Initialize(); err != nil {
-			return "", fmt.Errorf("failed to initialize data processor: %w", err)
-		}
-		db = tempService.GetDatabase()
-	}
-	// Port is already set above
-	// No need to redefine webPort here
-
 	// Initialize web service if it's enabled in the config
-	g.webService = service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
+	g.webService = service.NewWebService(g.log, g.config.DatabasePath, g.config.PlayerName, g.config.TeamName, webPort)
 	if err := g.webService.Initialize(); err != nil {
 		g.webService = nil
 		return "", fmt.Errorf("failed to initialize web server: %w", err)
@@ -425,31 +412,26 @@ func (g *MainGUI) startWebServer(showDialog bool) {
 	}
 
 	// Try to open the browser
-	openBrowser(url)
+	g.openBrowser(url)
 }
 
-// openBrowser opens the default browser to the specified URL
-func openBrowser(url string) {
-	var err error
-
-	switch {
-	case hasCommand("rundll32"):
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case hasCommand("explorer"):
-		err = exec.Command("explorer", url).Start()
-	default:
-		err = fmt.Errorf("could not find browser command")
-	}
-
+// openBrowser opens the default browser to the specified URL using Fyne's built-in capability
+func (g *MainGUI) openBrowser(urlStr string) {
+	u, err := url.Parse(urlStr)
 	if err != nil {
-		fmt.Printf("Error opening browser: %v\n", err)
+		g.log.Error("Failed to parse URL: %v", err)
+		return
 	}
-}
 
-// hasCommand checks if a command exists
-func hasCommand(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
+	err = g.app.OpenURL(u)
+	if err != nil {
+		g.log.Error("Error opening browser: %v", err)
+		// Fallback for some systems where OpenURL might fail but direct execution works
+		// This is a minimal fallback that doesn't rely on Windows-only commands
+		if runtime.GOOS == "linux" {
+			exec.Command("xdg-open", urlStr).Start()
+		}
+	}
 }
 
 // createConfigTab creates the content for the configuration tab
@@ -706,9 +688,18 @@ func (g *MainGUI) createDebugTab() fyne.CanvasObject {
 		}()
 	})
 
+	// Create verbose logging checkbox
+	g.verboseCheck = widget.NewCheck("Verbose Logging", func(checked bool) {
+		g.config.Verbose = checked
+		g.log.SetDebugMode(checked)
+		debugStatusLabel.SetText(fmt.Sprintf("Verbose logging %s", map[bool]string{true: "enabled", false: "disabled"}[checked]))
+	})
+	g.verboseCheck.SetChecked(g.config.Verbose)
+
 	// Create debug tools section
 	debugToolsBox := container.NewVBox(
 		widget.NewLabelWithStyle("Debug Tools", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		g.verboseCheck,
 		screenshotTestButton,
 		listWindowsButton,
 		configReloadButton,
@@ -993,6 +984,9 @@ func (g *MainGUI) updateConfigFormFields() {
 	if g.webServerPortEntry != nil {
 		g.webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
 	}
+	if g.verboseCheck != nil {
+		g.verboseCheck.SetChecked(g.config.Verbose)
+	}
 }
 
 // updateServicesFromConfig updates services when configuration changes
@@ -1024,6 +1018,9 @@ func (g *MainGUI) updateServicesFromConfig(oldConfig config.Config) {
 		// For now, we'll just log that the database path changed
 		g.log.Info("Database path changed, restart monitoring to apply changes")
 	}
+
+	// Apply verbose setting to logger
+	g.log.SetDebugMode(g.config.Verbose)
 }
 
 // ForceReloadConfig manually triggers a configuration reload (useful for testing or debugging)

@@ -5,16 +5,14 @@ This document outlines the process for creating new releases of EU-CLAMS.
 ## How to Create a New Release
 
 1. Make sure all your changes are committed and tested in a feature branch.
+   a. Update the version number in `FyneApp.toml` and `cmd/app/main.go` in your feature branch
+   b. Commit this change to your feature branch
 
 2. Create a pull request targeting the `main` branch.
 
-3. Once the pull request is approved and ready to merge, you'll need to:
-   
-   a. Update the version number in `FyneApp.toml` in your feature branch
-   b. Commit this change to your feature branch
-   c. Merge the pull request into `main`
+3. Once the pull request is approved and ready to merge, merge it into `main`.
 
-4. After the PR is merged, create and push a new tag with the version number:
+4. Create and push a new tag with the version number:
 
    ```powershell
    # Make sure you're on the main branch and up-to-date
@@ -22,10 +20,10 @@ This document outlines the process for creating new releases of EU-CLAMS.
    git pull
 
    # Create a new tag (replace x.y.z with the actual version number)
-   git tag v1.2.3
+   git tag vx.y.z
    
    # Push the tag to GitHub
-   git push origin v1.2.3
+   git push origin vx.y.z
    ```
 
 5. The tag push will automatically trigger the release workflow (not regular pushes to main), which will:

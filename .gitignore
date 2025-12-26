@@ -25,3 +25,4 @@ go.work
 # Real data files
 config.yaml
 data/
+eu-clams

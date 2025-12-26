@@ -19,6 +19,7 @@ type CommandLineOverrides struct {
 	GameWindowTitle     *string
 	EnableWebServer     *bool
 	WebServerPort       *int
+	Verbose             *bool
 }
 
 // Manager handles configuration loading, saving, and reloading
@@ -113,6 +114,9 @@ func (m *Manager) applyOverrides() {
 	}
 	if m.overrides.WebServerPort != nil && *m.overrides.WebServerPort != 0 {
 		m.config.WebServerPort = *m.overrides.WebServerPort
+	}
+	if m.overrides.Verbose != nil {
+		m.config.Verbose = *m.overrides.Verbose
 	}
 }
 

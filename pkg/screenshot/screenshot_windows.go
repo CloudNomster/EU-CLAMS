@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,6 +24,10 @@ var (
 	procGetWindowRect          = user32.NewProc("GetWindowRect")
 	procGetDC                  = user32.NewProc("GetDC")
 	procReleaseDC              = user32.NewProc("ReleaseDC")
+	procGetWindowTextW         = user32.NewProc("GetWindowTextW")
+	procGetClassNameW          = user32.NewProc("GetClassNameW")
+	procEnumWindows            = user32.NewProc("EnumWindows")
+	procGetDpiForWindow        = user32.NewProc("GetDpiForWindow")
 	procBitBlt                 = gdi32.NewProc("BitBlt")
 	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
 	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
@@ -30,10 +35,13 @@ var (
 	procDeleteDC               = gdi32.NewProc("DeleteDC")
 	procDeleteObject           = gdi32.NewProc("DeleteObject")
 	procGetDIBits              = gdi32.NewProc("GetDIBits")
+	procGetObjectW             = gdi32.NewProc("GetObjectW")
+	procGetBitmapBits          = gdi32.NewProc("GetBitmapBits")
 	procPrintWindow            = user32.NewProc("PrintWindow")
 	procIsWindowVisible        = user32.NewProc("IsWindowVisible")
 	procSetLastError           = kernel32.NewProc("SetLastError")
 	procGetLastError           = kernel32.NewProc("GetLastError")
+	procFormatMessageW         = kernel32.NewProc("FormatMessageW")
 )
 
 // RECT is the Windows RECT structure
@@ -101,7 +109,6 @@ func ListWindowsContaining(substring string) ([]WindowInfo, error) {
 	cb := syscall.NewCallback(func(h syscall.Handle, param uintptr) uintptr {
 		// Get the window title
 		var title [256]uint16
-		procGetWindowTextW := user32.NewProc("GetWindowTextW")
 		clearLastError()
 		ret, _, _ := procGetWindowTextW.Call(
 			uintptr(h),
@@ -124,11 +131,11 @@ func ListWindowsContaining(substring string) ([]WindowInfo, error) {
 	})
 
 	// Enumerate all windows
-	procEnumWindows := user32.NewProc("EnumWindows")
 	clearLastError()
 	ret, _, _ := procEnumWindows.Call(cb, 0)
 	if ret == 0 {
-		// EnumWindows failed
+		// EnumWindows returns 0 if it fails OR if the callback returns 0 (which it never does here)
+		// Since our callback always returns 1, a 0 here is a real failure.
 		return nil, fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
 	}
 
@@ -154,7 +161,6 @@ func findWindowWithPartialTitleAndGetTitle(titlePrefix string) (syscall.Handle, 
 	cb := syscall.NewCallback(func(h syscall.Handle, param uintptr) uintptr {
 		// Get the window title
 		var title [256]uint16
-		procGetWindowTextW := user32.NewProc("GetWindowTextW")
 		clearLastError()
 		ret, _, _ := procGetWindowTextW.Call(
 			uintptr(h),
@@ -179,12 +185,15 @@ func findWindowWithPartialTitleAndGetTitle(titlePrefix string) (syscall.Handle, 
 	})
 
 	// Enumerate all windows
-	procEnumWindows := user32.NewProc("EnumWindows")
 	clearLastError()
 	ret, _, _ := procEnumWindows.Call(cb, 0)
-	if ret == 0 {
-		// EnumWindows failed
-		return 0, "", fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
+	// EnumWindows returns 0 if stopped by callback or if it fails.
+	// Since we stop when found (hwn != 0), we only check for real error if hwnd is still 0.
+	if ret == 0 && hwnd == 0 {
+		errCode := getLastErrorCode()
+		if errCode != 0 {
+			return 0, "", fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
+		}
 	}
 
 	if hwnd == 0 {
@@ -202,12 +211,11 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 		return nil, err
 	}
 	// Log diagnostic information about the window
-	fmt.Printf("[DEBUG CaptureWindow] Starting screenshot capture for window handle: %v\n", hwnd)
-	fmt.Printf("[DEBUG CaptureWindow] OS Version: %s\n", getWindowsVersionInfo())
+	log.Printf("[DEBUG CaptureWindow] Starting screenshot capture for window handle: %v\n", hwnd)
+	log.Printf("[DEBUG CaptureWindow] OS Version: %s\n", getWindowsVersionInfo())
 
 	// Get window class name for diagnostics
 	var className [256]uint16
-	procGetClassNameW := user32.NewProc("GetClassNameW")
 	clearLastError()
 	classLen, _, _ := procGetClassNameW.Call(
 		uintptr(hwnd),
@@ -218,9 +226,9 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	if classLen > 0 {
 		windowClass = syscall.UTF16ToString(className[:classLen])
 	} else {
-		fmt.Printf("[DEBUG] GetClassNameW failed: %s\n", getLastErrorDetails())
+		log.Printf("[DEBUG] GetClassNameW failed: %s\n", getLastErrorDetails())
 	}
-	fmt.Printf("[DEBUG CaptureWindow] Window class: %s\n", windowClass)
+	log.Printf("[DEBUG CaptureWindow] Window class: %s\n", windowClass)
 
 	// Get window rectangle
 	var rect RECT
@@ -234,7 +242,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	width := int(rect.Right - rect.Left)
 	height := int(rect.Bottom - rect.Top)
 
-	fmt.Printf("[DEBUG CaptureWindow] Window dimensions: %dx%d (Rect: Left=%d, Top=%d, Right=%d, Bottom=%d)\n",
+	log.Printf("[DEBUG CaptureWindow] Window dimensions: %dx%d (Rect: Left=%d, Top=%d, Right=%d, Bottom=%d)\n",
 		width, height, rect.Left, rect.Top, rect.Right, rect.Bottom)
 
 	// Sanity check dimensions
@@ -270,15 +278,15 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	clearLastError()
 	prevObj, _, _ := procSelectObject.Call(hdcMem, hBitmap)
 	if prevObj == 0 {
-		fmt.Printf("[DEBUG] SelectObject failed: %s\n", getLastErrorDetails())
+		log.Printf("[DEBUG] SelectObject failed: %s\n", getLastErrorDetails())
 	}
 	defer procSelectObject.Call(hdcMem, prevObj)
 	// Print OS version info to check differences between Windows 10 and 11
 	osVersion := getWindowsVersionInfo()
-	fmt.Printf("[DEBUG PrintWindow] OS Version: %s\n", osVersion)
+	log.Printf("[DEBUG PrintWindow] OS Version: %s\n", osVersion)
 
 	// Try PrintWindow first with full content rendering
-	fmt.Printf("[DEBUG PrintWindow] Trying with PW_RENDERFULLCONTENT flag\n")
+	log.Printf("[DEBUG PrintWindow] Trying with PW_RENDERFULLCONTENT flag\n")
 	clearLastError()
 	ret, _, _ = procPrintWindow.Call(
 		uintptr(hwnd),
@@ -286,11 +294,11 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 		PW_RENDERFULLCONTENT)
 
 	errDetails := getLastErrorDetails()
-	fmt.Printf("[DEBUG PrintWindow] PW_RENDERFULLCONTENT result: %d, Error: %s\n", ret, errDetails)
+	log.Printf("[DEBUG PrintWindow] PW_RENDERFULLCONTENT result: %d, Error: %s\n", ret, errDetails)
 
 	// If it fails, try regular PrintWindow
 	if ret == 0 {
-		fmt.Printf("[DEBUG PrintWindow] Trying with no flags\n")
+		log.Printf("[DEBUG PrintWindow] Trying with no flags\n")
 		clearLastError()
 		ret, _, _ = procPrintWindow.Call(
 			uintptr(hwnd),
@@ -298,18 +306,18 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			0)
 
 		errDetails = getLastErrorDetails()
-		fmt.Printf("[DEBUG PrintWindow] No flags result: %d, Error: %s\n", ret, errDetails)
+		log.Printf("[DEBUG PrintWindow] No flags result: %d, Error: %s\n", ret, errDetails)
 
 		// If that also fails, try BitBlt as a last resort
 		if ret == 0 {
-			fmt.Printf("[DEBUG PrintWindow] Trying BitBlt as last resort\n")
+			log.Printf("[DEBUG PrintWindow] Trying BitBlt as last resort\n")
 			clearLastError()
 			ret, _, _ = procBitBlt.Call(
 				hdcMem, 0, 0, uintptr(width), uintptr(height),
 				hdc, 0, 0, SRCCOPY)
 
 			errDetails = getLastErrorDetails()
-			fmt.Printf("[DEBUG BitBlt] Result: %d, Error: %s\n", ret, errDetails)
+			log.Printf("[DEBUG BitBlt] Result: %d, Error: %s\n", ret, errDetails)
 
 			if ret == 0 {
 				return nil, fmt.Errorf("all screen capture methods failed")
@@ -339,16 +347,16 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 
 	// Log detailed debug info before GetDIBits call
 	logDebugInfo("Before GetDIBits", hwnd, hdc, hdcMem, hBitmap, width, height, bmi)
-	fmt.Printf("[DEBUG] About to call GetDIBits with img.Pix length: %d\n", len(img.Pix))
+	log.Printf("[DEBUG] About to call GetDIBits with img.Pix length: %d\n", len(img.Pix))
 
 	// Try using our debug wrapper for GetDIBits
 	ret, err2 := debugGetDIBits(hdcMem, hBitmap, height, img.Pix, &bmi)
 	if ret == 0 {
 		// Try alternative approaches if standard approach fails
 
-		// Approach 1: Try with 24-bit color depth instead of 32-bit		fmt.Printf("[DEBUG] Standard GetDIBits failed, checking bitmap info and trying with 24-bit color depth...\n")
+		// Approach 1: Try with 24-bit color depth instead of 32-bit
+		log.Printf("[DEBUG] Standard GetDIBits failed, checking bitmap info and trying with 24-bit color depth...\n")
 		// Try to get actual bitmap info first
-		procGetObject := gdi32.NewProc("GetObjectW")
 		var bitmapInfo struct {
 			Type       int32
 			Width      int32
@@ -359,16 +367,16 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			Bits       uintptr
 		}
 		clearLastError()
-		objRet, _, _ := procGetObject.Call(
+		objRet, _, _ := procGetObjectW.Call(
 			hBitmap,
 			uintptr(unsafe.Sizeof(bitmapInfo)),
 			uintptr(unsafe.Pointer(&bitmapInfo)))
 
 		if objRet != 0 {
-			fmt.Printf("[DEBUG] GetObject reports: Width=%d, Height=%d, BitsPixel=%d\n",
+			log.Printf("[DEBUG] GetObject reports: Width=%d, Height=%d, BitsPixel=%d\n",
 				bitmapInfo.Width, bitmapInfo.Height, bitmapInfo.BitsPixel)
 		} else {
-			fmt.Printf("[DEBUG] GetObject failed: %s\n", getLastErrorDetails())
+			log.Printf("[DEBUG] GetObject failed: %s\n", getLastErrorDetails())
 		}
 
 		// Try with 24-bit format
@@ -386,19 +394,18 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			DIB_RGB_COLORS)
 
 		errDetails := getLastErrorDetails()
-		fmt.Printf("[DEBUG] 24-bit GetDIBits result: %d, Error: %s\n", ret, errDetails)
+		log.Printf("[DEBUG] 24-bit GetDIBits result: %d, Error: %s\n", ret, errDetails)
 
 		// Approach 2: Try GetBitmapBits as an alternative
 		if ret == 0 {
-			fmt.Printf("[DEBUG] Trying GetBitmapBits as alternative...\n")
-			procGetBitmapBits := gdi32.NewProc("GetBitmapBits")
+			log.Printf("[DEBUG] Trying GetBitmapBits as alternative...\n")
 			bitsSize := int32(width * height * 4)
 			bits := make([]byte, bitsSize)
 			clearLastError()
-			ret, _, _ := procGetBitmapBits.Call(hBitmap, uintptr(bitsSize), uintptr(unsafe.Pointer(&bits[0])))
+			ret, _, _ = procGetBitmapBits.Call(hBitmap, uintptr(bitsSize), uintptr(unsafe.Pointer(&bits[0])))
 
 			errDetails := getLastErrorDetails()
-			fmt.Printf("[DEBUG] GetBitmapBits result: %d, Error: %s\n", ret, errDetails)
+			log.Printf("[DEBUG] GetBitmapBits result: %d, Error: %s\n", ret, errDetails)
 
 			if ret > 0 {
 				// Copy the bitmap bits to our image
@@ -411,7 +418,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 						img.Pix[i+3] = 255       // A
 					}
 				}
-				fmt.Printf("[DEBUG] Successfully copied bitmap data using GetBitmapBits\n")
+				log.Printf("[DEBUG] Successfully copied bitmap data using GetBitmapBits\n")
 			} else {
 				return nil, fmt.Errorf("failed to get bitmap bits: %v (width=%d, height=%d, required buffer=%d bytes, image size=%d)", err2, width, height, requiredBufferSize, len(img.Pix))
 			}
@@ -423,7 +430,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	}
 
 	// Log post-GetDIBits information
-	fmt.Printf("[DEBUG] After GetDIBits, ret=%d\n", ret)
+	log.Printf("[DEBUG] After GetDIBits, ret=%d\n", ret)
 
 	// Fix color channel order: Windows GDI returns BGR but Go expects RGB
 	for i := 0; i < len(img.Pix); i += 4 {
@@ -570,9 +577,8 @@ func getLastErrorDetails() string {
 	// Format message buffer
 	var buffer [512]uint16
 	const FORMAT_MESSAGE_FROM_SYSTEM = 0x00001000
-	formatMessage := kernel32.NewProc("FormatMessageW")
 
-	ret, _, _ := formatMessage.Call(
+	ret, _, _ := procFormatMessageW.Call(
 		FORMAT_MESSAGE_FROM_SYSTEM,
 		0,
 		uintptr(code),
@@ -594,11 +600,10 @@ func getLastErrorDetails() string {
 func logDebugInfo(prefix string, hwnd syscall.Handle, hdc, hdcMem, hBitmap uintptr, width, height int, bmi BITMAPINFO) {
 	// Check if this is Windows 10 or 11
 	osVersion := getWindowsVersionInfo()
-	fmt.Printf("[DEBUG %s] OS Version: %s\n", prefix, osVersion)
+	log.Printf("[DEBUG %s] OS Version: %s\n", prefix, osVersion)
 
 	// Get window class
 	var className [256]uint16
-	procGetClassNameW := user32.NewProc("GetClassNameW")
 	clearLastError()
 	ret, _, _ := procGetClassNameW.Call(
 		uintptr(hwnd),
@@ -609,43 +614,42 @@ func logDebugInfo(prefix string, hwnd syscall.Handle, hdc, hdcMem, hBitmap uintp
 	if ret > 0 {
 		class = syscall.UTF16ToString(className[:ret])
 	} else {
-		fmt.Printf("[DEBUG %s] GetClassNameW failed: %s\n", prefix, getLastErrorDetails())
+		log.Printf("[DEBUG %s] GetClassNameW failed: %s\n", prefix, getLastErrorDetails())
 	}
-	fmt.Printf("[DEBUG %s] Window class: %s\n", prefix, class)
+	log.Printf("[DEBUG %s] Window class: %s\n", prefix, class)
 
 	// Check DPI information
-	procGetDpiForWindow := user32.NewProc("GetDpiForWindow")
 	if procGetDpiForWindow.Find() == nil {
 		clearLastError()
 		dpi, _, _ := procGetDpiForWindow.Call(uintptr(hwnd))
 		if dpi > 0 {
-			fmt.Printf("[DEBUG %s] Window DPI: %d\n", prefix, dpi)
+			log.Printf("[DEBUG %s] Window DPI: %d\n", prefix, dpi)
 		} else {
-			fmt.Printf("[DEBUG %s] GetDpiForWindow failed: %s\n", prefix, getLastErrorDetails())
+			log.Printf("[DEBUG %s] GetDpiForWindow failed: %s\n", prefix, getLastErrorDetails())
 		}
 	} else {
-		fmt.Printf("[DEBUG %s] GetDpiForWindow not available\n", prefix)
+		log.Printf("[DEBUG %s] GetDpiForWindow not available\n", prefix)
 	}
 
 	// Log bitmap info
-	fmt.Printf("[DEBUG %s] Bitmap info: %dx%d, bitCount=%d, compression=%d, sizeImage=%d\n",
+	log.Printf("[DEBUG %s] Bitmap info: %dx%d, bitCount=%d, compression=%d, sizeImage=%d\n",
 		prefix, width, height, bmi.BmiHeader.BiBitCount, bmi.BmiHeader.BiCompression, bmi.BmiHeader.BiSizeImage)
 
 	// Log memory info for image buffer
 	memStats := runtime.MemStats{}
 	runtime.ReadMemStats(&memStats)
-	fmt.Printf("[DEBUG %s] Memory stats: Alloc=%d MB, Sys=%d MB\n",
+	log.Printf("[DEBUG %s] Memory stats: Alloc=%d MB, Sys=%d MB\n",
 		prefix, memStats.Alloc/1024/1024, memStats.Sys/1024/1024)
 }
 
 // debugGetDIBits is a wrapper around GetDIBits with extensive diagnostics
 func debugGetDIBits(hdcMem, hBitmap uintptr, height int, imgPix []byte, bmi *BITMAPINFO) (uintptr, error) {
 	// Print debug info before GetDIBits
-	fmt.Printf("[DEBUG GetDIBits] BEFORE call: imgPix len=%d, bmiHeader size=%d\n",
+	log.Printf("[DEBUG GetDIBits] BEFORE call: imgPix len=%d, bmiHeader size=%d\n",
 		len(imgPix), bmi.BmiHeader.BiSize)
 
 	// Try with different start scan line values
-	fmt.Printf("[DEBUG GetDIBits] Trying with standard parameters...\n")
+	log.Printf("[DEBUG GetDIBits] Trying with standard parameters...\n")
 	clearLastError()
 	ret, _, err := procGetDIBits.Call(
 		hdcMem, hBitmap,
@@ -656,12 +660,12 @@ func debugGetDIBits(hdcMem, hBitmap uintptr, height int, imgPix []byte, bmi *BIT
 
 	// Check error and print details
 	errDetails := getLastErrorDetails()
-	fmt.Printf("[DEBUG GetDIBits] Return value: %d, Error: %s\n", ret, errDetails)
+	log.Printf("[DEBUG GetDIBits] Return value: %d, Error: %s\n", ret, errDetails)
 
 	// Try alternate strategies if standard call fails
 	if ret == 0 {
 		// Try with different scan parameters
-		fmt.Printf("[DEBUG GetDIBits] Trying alternate parameters...\n")
+		log.Printf("[DEBUG GetDIBits] Trying alternate parameters...\n")
 
 		// Try with a small sleep to allow for any async operations
 		time.Sleep(50 * time.Millisecond)
@@ -675,7 +679,7 @@ func debugGetDIBits(hdcMem, hBitmap uintptr, height int, imgPix []byte, bmi *BIT
 			DIB_RGB_COLORS)
 
 		errDetails = getLastErrorDetails()
-		fmt.Printf("[DEBUG GetDIBits] Alternate params result: %d, Error: %s\n", ret, errDetails)
+		log.Printf("[DEBUG GetDIBits] Alternate params result: %d, Error: %s\n", ret, errDetails)
 	}
 
 	return ret, err

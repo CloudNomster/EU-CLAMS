@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Logger struct {
 	warnLogger  *log.Logger
 	errorLogger *log.Logger
 	debugMode   bool
+	logFile     *os.File
 }
 
 // New creates a new Logger instance
@@ -24,6 +26,41 @@ func New() *Logger {
 		warnLogger:  log.New(os.Stdout, "[WARN] ", log.Ldate|log.Ltime),
 		errorLogger: log.New(os.Stderr, "[ERROR] ", log.Ldate|log.Ltime),
 		debugMode:   false,
+	}
+}
+
+// InitFileLogging initializes logging to a file
+func (l *Logger) InitFileLogging(logPath string) error {
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(logPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %v", err)
+	}
+
+	// Open log file (append mode)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %v", err)
+	}
+
+	l.logFile = f
+
+	// Redirect all loggers to the file
+	l.debugLogger.SetOutput(f)
+	l.infoLogger.SetOutput(f)
+	l.warnLogger.SetOutput(f)
+	l.errorLogger.SetOutput(f)
+
+	// Also redirect standard logger
+	log.SetOutput(f)
+
+	return nil
+}
+
+// Close closes the log file if it's open
+func (l *Logger) Close() {
+	if l.logFile != nil {
+		l.logFile.Close()
 	}
 }
 
