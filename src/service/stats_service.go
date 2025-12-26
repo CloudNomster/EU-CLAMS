@@ -54,8 +54,8 @@ func (s *StatsService) Run() error {
 	statsData := s.db.GetStatsData()
 	// Format and print report
 	statsReport := stats.FormatStatsReport(statsData, s.playerName, s.teamName)
-	fmt.Println("\n--- PLAYER STATISTICS ---")
-	fmt.Println(statsReport)
+	s.log.Info("--- PLAYER STATISTICS ---")
+	s.log.Info("%s", statsReport)
 
 	return nil
 }

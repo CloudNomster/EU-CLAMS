@@ -170,9 +170,9 @@ func (s *DataProcessorService) processLogFile() error {
 
 		if shouldPrint {
 			// Simple format: [Global] <Type> <Player> <Target> <Value> PED
-			fmt.Printf("[Global] %s: %s - %s (%s) - %.2f PED\n", g.Timestamp.Format("15:04:05"), g.Type, g.PlayerName, g.Target, g.Value)
+			s.log.Info("[Global] %s: %s - %s (%s) - %.2f PED", g.Timestamp.Format("15:04:05"), g.Type, g.PlayerName, g.Target, g.Value)
 			if g.IsHof {
-				fmt.Printf("   *** HALL OF FAME ***\n")
+				s.log.Info("   *** HALL OF FAME ***")
 			}
 		}
 	}

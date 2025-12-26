@@ -20,7 +20,14 @@ const (
 
 var log = logger.New()
 
-func main() { // Define command-line flags
+func main() {
+	// Initialize file logging early
+	if err := log.InitFileLogging("logs/app.log"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
+	}
+	defer log.Close()
+
+	// Define command-line flags
 	configPath := flag.String("config", "", "Path to configuration file")
 	logPath := flag.String("log", "", "Path to Entropia Universe chat log file")
 	playerName := flag.String("player", "", "Your character name in Entropia Universe")
@@ -70,7 +77,7 @@ func main() { // Define command-line flags
 
 	// Initialize logger with appropriate debug level
 	if *verbose {
-		log = logger.NewWithDebug()
+		log.SetDebugMode(true)
 		log.Debug("Debug logging enabled")
 	}
 	log.Info("EU-CLAMS starting...")
@@ -101,6 +108,8 @@ func main() { // Define command-line flags
 			overrides.EnableWebServer = webServer
 		case "web-port":
 			overrides.WebServerPort = webPort
+		case "verbose":
+			overrides.Verbose = verbose
 		}
 	})
 
@@ -110,9 +119,6 @@ func main() { // Define command-line flags
 		log.Error("Failed to load configuration: %v", err)
 		os.Exit(1)
 	}
-
-	// Set runtime flags
-	cfg.Verbose = *verbose
 
 	actualConfigPath := configManager.GetConfigPath()
 	log.Info("Configuration loaded from: %s", actualConfigPath)

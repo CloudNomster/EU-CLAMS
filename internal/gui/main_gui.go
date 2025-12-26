@@ -7,6 +7,7 @@ import (
 	"eu-clams/pkg/screenshot"
 	"eu-clams/src/service"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,7 @@ type MainGUI struct {
 	gameWindowTitleEntry   *widget.Entry
 	enableWebServerCheck   *widget.Check
 	webServerPortEntry     *widget.Entry
+	verboseCheck           *widget.Check
 
 	// Configuration reloading
 	reloadTicker *time.Ticker
@@ -427,7 +429,7 @@ func openBrowser(url string) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error opening browser: %v\n", err)
+		log.Printf("Error opening browser: %v", err)
 	}
 }
 
@@ -691,9 +693,18 @@ func (g *MainGUI) createDebugTab() fyne.CanvasObject {
 		}()
 	})
 
+	// Create verbose logging checkbox
+	g.verboseCheck = widget.NewCheck("Verbose Logging", func(checked bool) {
+		g.config.Verbose = checked
+		g.log.SetDebugMode(checked)
+		debugStatusLabel.SetText(fmt.Sprintf("Verbose logging %s", map[bool]string{true: "enabled", false: "disabled"}[checked]))
+	})
+	g.verboseCheck.SetChecked(g.config.Verbose)
+
 	// Create debug tools section
 	debugToolsBox := container.NewVBox(
 		widget.NewLabelWithStyle("Debug Tools", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		g.verboseCheck,
 		screenshotTestButton,
 		listWindowsButton,
 		configReloadButton,
@@ -978,6 +989,9 @@ func (g *MainGUI) updateConfigFormFields() {
 	if g.webServerPortEntry != nil {
 		g.webServerPortEntry.SetText(strconv.Itoa(g.config.WebServerPort))
 	}
+	if g.verboseCheck != nil {
+		g.verboseCheck.SetChecked(g.config.Verbose)
+	}
 }
 
 // updateServicesFromConfig updates services when configuration changes
@@ -1009,6 +1023,9 @@ func (g *MainGUI) updateServicesFromConfig(oldConfig config.Config) {
 		// For now, we'll just log that the database path changed
 		g.log.Info("Database path changed, restart monitoring to apply changes")
 	}
+
+	// Apply verbose setting to logger
+	g.log.SetDebugMode(g.config.Verbose)
 }
 
 // ForceReloadConfig manually triggers a configuration reload (useful for testing or debugging)
