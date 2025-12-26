@@ -7,7 +7,7 @@ import (
 	"eu-clams/pkg/screenshot"
 	"eu-clams/src/service"
 	"fmt"
-	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -412,31 +412,26 @@ func (g *MainGUI) startWebServer(showDialog bool) {
 	}
 
 	// Try to open the browser
-	openBrowser(url)
+	g.openBrowser(url)
 }
 
-// openBrowser opens the default browser to the specified URL
-func openBrowser(url string) {
-	var err error
-
-	switch {
-	case hasCommand("rundll32"):
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case hasCommand("explorer"):
-		err = exec.Command("explorer", url).Start()
-	default:
-		err = fmt.Errorf("could not find browser command")
-	}
-
+// openBrowser opens the default browser to the specified URL using Fyne's built-in capability
+func (g *MainGUI) openBrowser(urlStr string) {
+	u, err := url.Parse(urlStr)
 	if err != nil {
-		log.Printf("Error opening browser: %v", err)
+		g.log.Error("Failed to parse URL: %v", err)
+		return
 	}
-}
 
-// hasCommand checks if a command exists
-func hasCommand(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
+	err = g.app.OpenURL(u)
+	if err != nil {
+		g.log.Error("Error opening browser: %v", err)
+		// Fallback for some systems where OpenURL might fail but direct execution works
+		// This is a minimal fallback that doesn't rely on Windows-only commands
+		if runtime.GOOS == "linux" {
+			exec.Command("xdg-open", urlStr).Start()
+		}
+	}
 }
 
 // createConfigTab creates the content for the configuration tab
