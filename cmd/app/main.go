@@ -210,7 +210,7 @@ func main() { // Define command-line flags
 			}
 
 			log.Info("Starting web server on port %d...", webServerPort)
-			webService = service.NewWebService(log, dataProcessor.GetDatabase(), cfg.PlayerName, cfg.TeamName, webServerPort)
+			webService = service.NewWebService(log, cfg.DatabasePath, cfg.PlayerName, cfg.TeamName, webServerPort)
 			if err := webService.Initialize(); err != nil {
 				log.Error("Failed to initialize web service: %v", err)
 				os.Exit(1)

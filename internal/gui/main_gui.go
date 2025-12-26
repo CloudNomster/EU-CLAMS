@@ -353,23 +353,8 @@ func (g *MainGUI) initWebServer() (string, error) {
 		return "", fmt.Errorf("player name is required")
 	}
 
-	// Get database from existing service or create new one
-	var db *storage.EntropyDB
-	if g.dataService != nil {
-		db = g.dataService.GetDatabase()
-	} else {
-		// Initialize data processor service just to get database
-		tempService := service.NewDataProcessorService(g.log, g.config, "")
-		if err := tempService.Initialize(); err != nil {
-			return "", fmt.Errorf("failed to initialize data processor: %w", err)
-		}
-		db = tempService.GetDatabase()
-	}
-	// Port is already set above
-	// No need to redefine webPort here
-
 	// Initialize web service if it's enabled in the config
-	g.webService = service.NewWebService(g.log, db, g.config.PlayerName, g.config.TeamName, webPort)
+	g.webService = service.NewWebService(g.log, g.config.DatabasePath, g.config.PlayerName, g.config.TeamName, webPort)
 	if err := g.webService.Initialize(); err != nil {
 		g.webService = nil
 		return "", fmt.Errorf("failed to initialize web server: %w", err)
