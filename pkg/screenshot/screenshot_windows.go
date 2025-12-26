@@ -23,6 +23,10 @@ var (
 	procGetWindowRect          = user32.NewProc("GetWindowRect")
 	procGetDC                  = user32.NewProc("GetDC")
 	procReleaseDC              = user32.NewProc("ReleaseDC")
+	procGetWindowTextW         = user32.NewProc("GetWindowTextW")
+	procGetClassNameW          = user32.NewProc("GetClassNameW")
+	procEnumWindows            = user32.NewProc("EnumWindows")
+	procGetDpiForWindow        = user32.NewProc("GetDpiForWindow")
 	procBitBlt                 = gdi32.NewProc("BitBlt")
 	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
 	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
@@ -30,10 +34,13 @@ var (
 	procDeleteDC               = gdi32.NewProc("DeleteDC")
 	procDeleteObject           = gdi32.NewProc("DeleteObject")
 	procGetDIBits              = gdi32.NewProc("GetDIBits")
+	procGetObjectW             = gdi32.NewProc("GetObjectW")
+	procGetBitmapBits          = gdi32.NewProc("GetBitmapBits")
 	procPrintWindow            = user32.NewProc("PrintWindow")
 	procIsWindowVisible        = user32.NewProc("IsWindowVisible")
 	procSetLastError           = kernel32.NewProc("SetLastError")
 	procGetLastError           = kernel32.NewProc("GetLastError")
+	procFormatMessageW         = kernel32.NewProc("FormatMessageW")
 )
 
 // RECT is the Windows RECT structure
@@ -101,7 +108,6 @@ func ListWindowsContaining(substring string) ([]WindowInfo, error) {
 	cb := syscall.NewCallback(func(h syscall.Handle, param uintptr) uintptr {
 		// Get the window title
 		var title [256]uint16
-		procGetWindowTextW := user32.NewProc("GetWindowTextW")
 		clearLastError()
 		ret, _, _ := procGetWindowTextW.Call(
 			uintptr(h),
@@ -124,11 +130,11 @@ func ListWindowsContaining(substring string) ([]WindowInfo, error) {
 	})
 
 	// Enumerate all windows
-	procEnumWindows := user32.NewProc("EnumWindows")
 	clearLastError()
 	ret, _, _ := procEnumWindows.Call(cb, 0)
 	if ret == 0 {
-		// EnumWindows failed
+		// EnumWindows returns 0 if it fails OR if the callback returns 0 (which it never does here)
+		// Since our callback always returns 1, a 0 here is a real failure.
 		return nil, fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
 	}
 
@@ -154,7 +160,6 @@ func findWindowWithPartialTitleAndGetTitle(titlePrefix string) (syscall.Handle, 
 	cb := syscall.NewCallback(func(h syscall.Handle, param uintptr) uintptr {
 		// Get the window title
 		var title [256]uint16
-		procGetWindowTextW := user32.NewProc("GetWindowTextW")
 		clearLastError()
 		ret, _, _ := procGetWindowTextW.Call(
 			uintptr(h),
@@ -179,12 +184,15 @@ func findWindowWithPartialTitleAndGetTitle(titlePrefix string) (syscall.Handle, 
 	})
 
 	// Enumerate all windows
-	procEnumWindows := user32.NewProc("EnumWindows")
 	clearLastError()
 	ret, _, _ := procEnumWindows.Call(cb, 0)
-	if ret == 0 {
-		// EnumWindows failed
-		return 0, "", fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
+	// EnumWindows returns 0 if stopped by callback or if it fails.
+	// Since we stop when found (hwn != 0), we only check for real error if hwnd is still 0.
+	if ret == 0 && hwnd == 0 {
+		errCode := getLastErrorCode()
+		if errCode != 0 {
+			return 0, "", fmt.Errorf("EnumWindows failed: %s", getLastErrorDetails())
+		}
 	}
 
 	if hwnd == 0 {
@@ -207,7 +215,6 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 
 	// Get window class name for diagnostics
 	var className [256]uint16
-	procGetClassNameW := user32.NewProc("GetClassNameW")
 	clearLastError()
 	classLen, _, _ := procGetClassNameW.Call(
 		uintptr(hwnd),
@@ -346,9 +353,9 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 	if ret == 0 {
 		// Try alternative approaches if standard approach fails
 
-		// Approach 1: Try with 24-bit color depth instead of 32-bit		fmt.Printf("[DEBUG] Standard GetDIBits failed, checking bitmap info and trying with 24-bit color depth...\n")
+		// Approach 1: Try with 24-bit color depth instead of 32-bit
+		fmt.Printf("[DEBUG] Standard GetDIBits failed, checking bitmap info and trying with 24-bit color depth...\n")
 		// Try to get actual bitmap info first
-		procGetObject := gdi32.NewProc("GetObjectW")
 		var bitmapInfo struct {
 			Type       int32
 			Width      int32
@@ -359,7 +366,7 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 			Bits       uintptr
 		}
 		clearLastError()
-		objRet, _, _ := procGetObject.Call(
+		objRet, _, _ := procGetObjectW.Call(
 			hBitmap,
 			uintptr(unsafe.Sizeof(bitmapInfo)),
 			uintptr(unsafe.Pointer(&bitmapInfo)))
@@ -391,11 +398,10 @@ func CaptureWindow(windowTitle string) (image.Image, error) {
 		// Approach 2: Try GetBitmapBits as an alternative
 		if ret == 0 {
 			fmt.Printf("[DEBUG] Trying GetBitmapBits as alternative...\n")
-			procGetBitmapBits := gdi32.NewProc("GetBitmapBits")
 			bitsSize := int32(width * height * 4)
 			bits := make([]byte, bitsSize)
 			clearLastError()
-			ret, _, _ := procGetBitmapBits.Call(hBitmap, uintptr(bitsSize), uintptr(unsafe.Pointer(&bits[0])))
+			ret, _, _ = procGetBitmapBits.Call(hBitmap, uintptr(bitsSize), uintptr(unsafe.Pointer(&bits[0])))
 
 			errDetails := getLastErrorDetails()
 			fmt.Printf("[DEBUG] GetBitmapBits result: %d, Error: %s\n", ret, errDetails)
@@ -570,9 +576,8 @@ func getLastErrorDetails() string {
 	// Format message buffer
 	var buffer [512]uint16
 	const FORMAT_MESSAGE_FROM_SYSTEM = 0x00001000
-	formatMessage := kernel32.NewProc("FormatMessageW")
 
-	ret, _, _ := formatMessage.Call(
+	ret, _, _ := procFormatMessageW.Call(
 		FORMAT_MESSAGE_FROM_SYSTEM,
 		0,
 		uintptr(code),
@@ -598,7 +603,6 @@ func logDebugInfo(prefix string, hwnd syscall.Handle, hdc, hdcMem, hBitmap uintp
 
 	// Get window class
 	var className [256]uint16
-	procGetClassNameW := user32.NewProc("GetClassNameW")
 	clearLastError()
 	ret, _, _ := procGetClassNameW.Call(
 		uintptr(hwnd),
@@ -614,7 +618,6 @@ func logDebugInfo(prefix string, hwnd syscall.Handle, hdc, hdcMem, hBitmap uintp
 	fmt.Printf("[DEBUG %s] Window class: %s\n", prefix, class)
 
 	// Check DPI information
-	procGetDpiForWindow := user32.NewProc("GetDpiForWindow")
 	if procGetDpiForWindow.Find() == nil {
 		clearLastError()
 		dpi, _, _ := procGetDpiForWindow.Call(uintptr(hwnd))
